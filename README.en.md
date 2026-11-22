@@ -16,14 +16,18 @@ One repository provides the shared core library plus two language-specific packa
 
 ## Quick start
 
-Python 3.10+. Install from GitHub with OCR and spelling repair:
+Python 3.10+. Install from PyPI with OCR and spelling repair:
 
 ```sh
 # Polish and English (full install)
-python -m pip install 'czytajpdf[ocr,polish] @ git+https://github.com/praha6248/CzytajPDF.git'
+python -m pip install 'czytajpdf[ocr,polish]'
 
 # English only (no morfeusz2)
-python -m pip install 'czytajpdf[ocr,english] @ git+https://github.com/praha6248/CzytajPDF.git'
+python -m pip install 'czytajpdf[ocr,english]'
+
+# Or use the language-specific packages:
+python -m pip install 'readpdf-en[all]'
+python -m pip install 'readpdf-pl[all]'
 ```
 
 ```python

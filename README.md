@@ -16,14 +16,18 @@ Jedno repozytorium dostarcza wspólną bibliotekę bazową oraz dwie paczki jęz
 
 ## Pierwszy odczyt
 
-Python 3.10+. Instalacja z GitHuba z obsługą OCR i korekty:
+Python 3.10+. Instalacja z PyPI z obsługą OCR i korekty:
 
 ```sh
 # Polski i angielski (pełna instalacja)
-python -m pip install 'czytajpdf[ocr,polish] @ git+https://github.com/praha6248/CzytajPDF.git'
+python -m pip install 'czytajpdf[ocr,polish]'
 
 # Tylko angielski (bez morfeusz2)
-python -m pip install 'czytajpdf[ocr,english] @ git+https://github.com/praha6248/CzytajPDF.git'
+python -m pip install 'czytajpdf[ocr,english]'
+
+# Lub bezpośrednio przez paczki językowe:
+python -m pip install 'readpdf-pl[all]'
+python -m pip install 'readpdf-en[all]'
 ```
 
 ```python
