@@ -26,27 +26,29 @@ Do PDF-ów z warstwą tekstową wystarczy instalacja bez dodatków i wywołanie 
 | --- | ---: | ---: | ---: | ---: |
 | [Dz.U. 2024 poz. 1](https://api.sejm.gov.pl/eli/acts/DU/2024/1/text.pdf) | 8 | 8 | 0 | 0 |
 | [Dz.U. 1945 nr 5 poz. 17](https://api.sejm.gov.pl/eli/acts/DU/1945/17/text.pdf) | 2 | 2 | 0 | 0 |
-| PDF mieszany z pierwszych stron obu dokumentów | 2 | 1 | 1 | 2662 |
+| PDF mieszany z pierwszych stron obu dokumentów | 2 | 1 | 1 | 2716 |
 
 ## Skuteczność korekty polskiego OCR
 
-Porównanie obejmuje **12 nagłówków z 12 skanów Dziennika Ustaw** (293 słowa, 2129 znaków). Z każdego rocznika co cztery lata od 1950 do 1994 wybrano pozycję 100. Numer pozycji, nazwę aktu, datę i tytuł przepisano z obrazu pierwszej strony. Ten sam wycinek trafił do RapidOCR, a następnie do korekty słownikowej.
+Pomiar obejmuje nagłówki z 18 archiwalnych skanów Dziennika Ustaw. Na pierwotnej próbce 12 nagłówków **liczba błędów słów spadła z 79 do 2**. Do porównania użyto tych samych wycinków i transkrypcji.
 
-| Błędy względem transkrypcji | Surowy OCR | Po korekcie |
+| Próbka i wersja biblioteki | Błędy znaków (CER) po korekcie | Błędy słów (WER) po korekcie |
 | --- | ---: | ---: |
-| Na poziomie znaków (CER) | 391 / 2129 · 18,37% | 382 / 2129 · 17,94% |
-| Na poziomie słów (WER) | 89 / 293 · 30,38% | 79 / 293 · 26,96% |
+| 12 pierwotnych nagłówków · 0.1.0, RapidOCR | 382 / 2129 · 17,94% | 79 / 293 · 26,96% |
+| Te same 12 nagłówków · 0.2.0, Tesseract | 2 / 2129 · 0,09% | 2 / 293 · 0,68% |
+| 3 dodatkowe nagłówki użyte do sprawdzenia i poprawienia obsługi dzielenia słów · 0.2.0 | 0 / 593 · 0,00% | 0 / 87 · 0,00% |
+| 3 osobne nagłówki użyte do końcowej weryfikacji · 0.2.0 | 1 / 430 · 0,23% | 1 / 67 · 1,49% |
 
-Korekta zmniejszyła liczbę błędów słów w 6 nagłówkach, w pozostałych 6 wynik był taki sam. Przywróciła m.in. zapis `działających` i `Żarach`. W skanie z 1994 r. zmieniła błędnie odczytane `stad` na równie błędne `stąd` w miejscu, gdzie wydrukowano `stanowisk`. Na skanach z 1978 i 1986 r. OCR pominął całą linię tytułu. Te pominięcia wliczono do wyniku.
+Na pierwotnej próbce surowy Tesseract popełnił 5 błędów słów, a drugi odczyt z korektą usunął 3. Pozostały pomyłki `r.` → `r,` oraz `i` → `1`. W końcowej weryfikacji OCR dodał kropkę po słowie `lutego`.
 
-CER i WER liczą wstawienia, usunięcia i zamiany względem transkrypcji, łącznie dla całej próbki. Ujednolicono odstępy i podział na wiersze, zachowując interpunkcję i wielkość liter. Wynik dotyczy drukowanych nagłówków aktów prawnych. [Odczyty, transkrypcje i źródłowe PDF-y](benchmarks/results.json) · [Skrypt pomiarowy](benchmarks/score.py)
+CER i WER uwzględniają zamiany, wstawienia i pominięcia względem transkrypcji z obrazu. Ujednolicono białe znaki, zachowując interpunkcję i wielkość liter. Wynik dotyczy wycinków z drukowanymi nagłówkami. [Pomiar 0.1.0](benchmarks/rapidocr-0.1.0.json) · [Pomiar 0.2.0](benchmarks/results.json) · [Próbka dodatkowa](benchmarks/holdout.json) · [Weryfikacja końcowa](benchmarks/validation.json) · [Skrypt pomiarowy](benchmarks/score.py)
 
 ## Jak wybierany jest sposób odczytu
 
-- Domyślnie działa pypdf. Przy `ocr=True` strony z mniej niż 40 znakami po pominięciu białych znaków trafiają do RapidOCR. Próg zmienisz przez `min_chars`. Długa, uszkodzona warstwa tekstowa może przejść ten próg.
-- `source` przyjmuje wartość `pdf` lub `rapidocr`. Pusty wynik OCR pozostawia tekst z warstwy PDF. Wynik zachowuje podział na strony, bez współrzędnych słów ani struktury tabel.
-- `correct=True` włącza korektę słownikową wyników OCR z użyciem wordfreq i Morfeusza 2. Przy nazwiskach i nazwach własnych warto porównać wynik z `raw_text`.
-- Rozpoznawanie odbywa się lokalnie. RapidOCR może pobrać brakujące modele przy pierwszym użyciu.
+- Domyślnie działa pypdf. Przy `ocr=True` strony z mniej niż 40 znakami po pominięciu białych znaków trafiają do polskiego modelu Tesseract. Aby wybrać RapidOCR, przekaż `engine="rapidocr"`. Próg zmienisz przez `min_chars`. Długa, uszkodzona warstwa tekstowa może przejść ten próg.
+- `source` przyjmuje wartość `pdf`, `tesseract` lub `rapidocr`. Pusty wynik OCR pozostawia tekst z warstwy PDF. Wynik zachowuje podział na strony, bez współrzędnych słów ani struktury tabel.
+- `correct=True` włącza korektę słownikową wyników OCR z użyciem wordfreq i Morfeusza 2. Tesseract może ponownie odczytać stronę w innej rozdzielczości, aby sprawdzić nierozpoznane słowa. Pierwszy odczyt pozostaje dostępny w `raw_text`. Przy nazwiskach i nazwach własnych warto porównać wynik z `raw_text`.
+- Rozpoznawanie odbywa się lokalnie. Przy pierwszym użyciu Tesseract pobiera polski model tessdata_best (około 12 MB), sprawdza SHA-256 i zapisuje plik w pamięci podręcznej. Kolejne odczyty działają offline. RapidOCR korzysta z osobnych modeli.
 
 ## Licencja i pochodzenie
 

@@ -10,7 +10,7 @@ from pypdf import PdfReader
 @dataclass(frozen=True)
 class Page:
     number: int
-    source: Literal["pdf", "rapidocr"]
+    source: Literal["pdf", "rapidocr", "tesseract"]
     raw_text: str
     text: str
 
@@ -24,9 +24,17 @@ class Document:
         return "\n".join(page.text for page in self.pages)
 
 
-def extract(path: str | Path, *, ocr: bool = False, correct: bool = False,
-            min_chars: int = 40) -> Document:
+def extract(
+    path: str | Path,
+    *,
+    ocr: bool = False,
+    correct: bool = False,
+    min_chars: int = 40,
+    engine: Literal["tesseract", "rapidocr"] = "tesseract",
+) -> Document:
     """Read all pages. When enabled, try OCR below min_chars non-whitespace characters."""
+    if engine not in ("rapidocr", "tesseract"):
+        raise ValueError("engine must be tesseract or rapidocr")
     if min_chars < 1:
         raise ValueError("min_chars must be positive")
     if correct and not ocr:
@@ -44,20 +52,13 @@ def extract(path: str | Path, *, ocr: bool = False, correct: bool = False,
                 from ._ocr import recognize
             except ImportError as exc:
                 raise ImportError("OCR requires czytajpdf[ocr]") from exc
-            recognized = recognize(path, indices)
+            recognized = recognize(path, indices, engine, correct)
 
     pages = []
     for index, original in enumerate(native):
-        candidate = recognized.get(index, "")
+        candidate, text = recognized.get(index, ("", ""))
         if not candidate.strip():
             pages.append(Page(index + 1, "pdf", original, original))
             continue
-        text = candidate
-        if correct:
-            try:
-                from ._spell import correct_text
-            except ImportError as exc:
-                raise ImportError("Spelling repair requires czytajpdf[polish]") from exc
-            text = correct_text(candidate)
-        pages.append(Page(index + 1, "rapidocr", candidate, text))
+        pages.append(Page(index + 1, engine, candidate, text))
     return Document(tuple(pages))

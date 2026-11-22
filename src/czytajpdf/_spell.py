@@ -5,6 +5,7 @@ import itertools
 import unicodedata
 import re
 from functools import lru_cache
+from difflib import SequenceMatcher
 
 import morfeusz2
 import wordfreq
@@ -129,6 +130,44 @@ def correct_word(token: str, min_zipf: float = 2.0) -> str:
     return _match_case(token, best)
 
 
+# A line-ending hyphen splits one lexical item into two apparent words.
+# Keep both fragments intact, including their original line separator.
+SPELL_TOKEN = re.compile(r"(?P<split>[^\W\d_]+[-‐]\s*\n[ \t]*[^\W\d_]+)|" + WORD.pattern)
+
+
 def correct_text(text: str, min_zipf: float = 2.0) -> str:
     """Repair every word of an OCR text that is not in the lexicon."""
-    return WORD.sub(lambda m: correct_word(m.group(0), min_zipf), text)
+    return SPELL_TOKEN.sub(lambda m: m[0] if m["split"] else correct_word(m[0], min_zipf), text)
+
+
+def needs_second_read(text: str) -> bool:
+    return any(not is_word(word) for word in WORD.findall(text))
+
+
+def reconcile_words(text: str, second_read: str) -> str:
+    """Repair unknown words only when a second reading supplies a similar known form."""
+    tokens = list(re.finditer(r"\S+", text))
+    first = [token.group() for token in tokens]
+    second = second_read.split()
+    pieces = []
+    last = 0
+    for tag, a, b, c, d in SequenceMatcher(None, first, second, autojunk=False).get_opcodes():
+        if tag != "replace" or b - a != d - c:
+            continue
+        for token, candidate in zip(tokens[a:b], second[c:d]):
+            original = token.group()
+            match = WORD.search(original)
+            other = WORD.search(candidate)
+            if not match or not other:
+                continue
+            before, after = match.group(), other.group()
+            if (original[:match.start()] != candidate[:other.start()]
+                    or original[match.end():] != candidate[other.end():]):
+                continue
+            if len(before) != len(after) or sum(x != y for x, y in zip(before, after)) > 1:
+                continue
+            if not is_word(before) and is_word(after):
+                pieces.extend((text[last:token.start()], candidate))
+                last = token.end()
+    pieces.append(text[last:])
+    return "".join(pieces)

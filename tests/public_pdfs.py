@@ -47,10 +47,10 @@ def check(directory: Path) -> None:
     assert not native.pages[1].text.strip()
     digital, scanned = extract(mixed, ocr=True, correct=True).pages
     assert digital == native.pages[0]
-    assert scanned.number == 2 and scanned.source == "rapidocr"
+    assert scanned.number == 2 and scanned.source == "tesseract"
     assert "DZIENNIK USTAW" in scanned.raw_text.upper()
     assert "1945" in scanned.text
-    print(f"Mixed PDF: pdf + rapidocr, {len(scanned.raw_text)} OCR characters")
+    print(f"Mixed PDF: pdf + tesseract, {len(scanned.raw_text)} OCR characters")
     for before, after in zip(scanned.raw_text.split(), scanned.text.split()):
         if before != after:
             print(f"  {before} -> {after}")

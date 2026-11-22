@@ -1,5 +1,6 @@
-"""Score the twelve transcribed headings. Run with Python, czytajpdf[ocr,polish] and reportlab."""
+"""Score transcribed Polish legal headings. Run with Python, czytajpdf[ocr,polish] and reportlab."""
 
+import argparse
 import json
 import tempfile
 import unicodedata
@@ -49,7 +50,10 @@ def measure(folder, year, top, bottom, reference):
 
 
 if __name__ == "__main__":
-    lines = Path(__file__).with_name("headings.txt").read_text(encoding="utf-8").splitlines()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--sample", choices=["headings", "holdout", "validation"], default="headings")
+    sample = parser.parse_args().sample
+    lines = Path(__file__).with_name(f"{sample}.txt").read_text(encoding="utf-8").splitlines()
     with tempfile.TemporaryDirectory() as directory:
         rows = [measure(Path(directory), *line.split("|", 3)) for line in lines]
     print(json.dumps(rows, ensure_ascii=False, indent=2))
