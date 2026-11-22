@@ -3,16 +3,22 @@
 from __future__ import annotations
 
 import importlib.util
+import io
+import json
 import sys
 import types
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from czytajpdf import Document, Page, extract
+from czytajpdf._cli import main as cli_main
+from czytajpdf._cli import main_en, main_pl
 from czytajpdf._quality import is_garbled, needs_ocr
 
+HAS_OCR = importlib.util.find_spec("pypdfium2") is not None
 HAS_POLISH = all(importlib.util.find_spec(pkg) is not None for pkg in ("morfeusz2", "wordfreq"))
 HAS_ENGLISH = importlib.util.find_spec("wordfreq") is not None
 HAS_WRAPPERS = all(
@@ -153,6 +159,94 @@ class ExtractTests(unittest.TestCase):
             self.assertEqual(doc.pages[0].source, "pdf")
             self.assertEqual(doc.pages[1], Page(2, "tesseract", "czysty odczyt OCR", "czysty odczyt OCR"))
             self.assertEqual(doc.pages[2], Page(3, "tesseract", "czysty odczyt OCR", "czysty odczyt OCR"))
+
+    def test_bytes_and_binary_stream_inputs(self) -> None:
+        pdf_bytes = _build_pdf([
+            "Pierwsza strona z bufora bajtow ma poprawna warstwe tekstowa.",
+            None,
+        ])
+        doc_bytes = extract(pdf_bytes)
+        self.assertEqual(len(doc_bytes.pages), 2)
+        self.assertIn("bufora bajtow", doc_bytes.pages[0].text)
+
+        doc_stream = extract(io.BytesIO(pdf_bytes))
+        self.assertEqual(doc_stream, doc_bytes)
+
+        with self.assertRaises(TypeError):
+            extract(io.StringIO("not bytes"))  # type: ignore[arg-type]
+
+        seen_sources: list[object] = []
+
+        def fake_recognize(source, indices, engine, correct, lang="pl"):
+            seen_sources.append(source)
+            return {1: ("ocr from bytes", "ocr from bytes")}
+
+        fake_mod = types.ModuleType("czytajpdf._ocr")
+        fake_mod.recognize = fake_recognize  # type: ignore[attr-defined]
+        with patch.dict(sys.modules, {"czytajpdf._ocr": fake_mod}):
+            doc_ocr = extract(pdf_bytes, ocr=True, lang="en")
+        self.assertEqual(seen_sources, [pdf_bytes])
+        self.assertEqual(doc_ocr.pages[1], Page(2, "tesseract", "ocr from bytes", "ocr from bytes"))
+
+    def test_cli_text_json_stdin_and_errors(self) -> None:
+        pdf_bytes = _build_pdf(["Tekst strony testowej dla wywolania z wiersza polecen."])
+        with TemporaryDirectory() as tmp:
+            pdf_path = Path(tmp) / "cli.pdf"
+            pdf_path.write_bytes(pdf_bytes)
+
+            out = io.StringIO()
+            with redirect_stdout(out):
+                status = cli_main([str(pdf_path)])
+            self.assertEqual(status, 0)
+            self.assertIn("Tekst strony testowej", out.getvalue())
+
+            out_json = io.StringIO()
+            with redirect_stdout(out_json):
+                status = cli_main([str(pdf_path), "--json"])
+            self.assertEqual(status, 0)
+            parsed = json.loads(out_json.getvalue())
+            self.assertEqual(parsed["pages"][0]["source"], "pdf")
+            self.assertIn("Tekst strony testowej", parsed["text"])
+
+        stdin_buf = io.BytesIO(pdf_bytes)
+        fake_stdin = types.SimpleNamespace(buffer=stdin_buf)
+        out_stdin = io.StringIO()
+        with patch("sys.stdin", fake_stdin), redirect_stdout(out_stdin):
+            status = cli_main(["-", "--json"])
+        self.assertEqual(status, 0)
+        self.assertIn("Tekst strony testowej", json.loads(out_stdin.getvalue())["text"])
+
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as exc:
+            cli_main(["doc.pdf", "--correct"])
+        self.assertEqual(exc.exception.code, 2)
+
+        err = io.StringIO()
+        with redirect_stderr(err):
+            missing_status = cli_main(["/nonexistent/file.pdf"])
+        self.assertEqual(missing_status, 1)
+        self.assertIn("error:", err.getvalue())
+
+        with patch("czytajpdf._cli.extract", return_value=Document((Page(1, "pdf", "ok", "ok"),))) as mock:
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(main_pl(["a.pdf"]), 0)
+            mock.assert_called_with("a.pdf", ocr=False, correct=False, min_chars=40, engine="tesseract", lang="pl")
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(main_en(["a.pdf"]), 0)
+            mock.assert_called_with("a.pdf", ocr=False, correct=False, min_chars=40, engine="tesseract", lang="en")
+
+
+@unittest.skipUnless(HAS_OCR, "czytajpdf[ocr] is not installed")
+class OcrBytesTests(unittest.TestCase):
+    def test_recognize_accepts_pdf_bytes(self) -> None:
+        from czytajpdf._ocr import recognize
+
+        pdf_bytes = _build_pdf([None])
+        with patch("czytajpdf._tesseract.open_engine") as mock_open, patch(
+            "czytajpdf._tesseract.read_page", return_value="ocr text"
+        ):
+            mock_open.return_value.__enter__.return_value = object()
+            result = recognize(pdf_bytes, [0], "tesseract", False, "en")
+        self.assertEqual(result, {0: ("ocr text", "ocr text")})
 
 
 @unittest.skipUnless(HAS_ENGLISH, "czytajpdf[english] is not installed")

@@ -1,9 +1,13 @@
 # readpdf-pl
 
-Pakiet Pythona do odczytu polskich dokumentów PDF i skanów strona po stronie (część projektu [CzytajPDF](https://github.com/praha6248/CzytajPDF)).
+Pakiet Pythona i CLI do odczytu polskich dokumentów PDF i skanów strona po stronie (część projektu [CzytajPDF](https://github.com/praha6248/CzytajPDF), stworzonego na podstawie projektu [odwolania2json](https://github.com/praha6248/odwolania2Json)).
 
 ```sh
 python -m pip install 'readpdf-pl[all]'
+```
+
+```sh
+readpdf-pl pismo-z-zalacznikami.pdf --ocr --correct --json
 ```
 
 ```python
@@ -14,4 +18,4 @@ for strona in dokument.pages:
     print(strona.number, strona.source, strona.text)
 ```
 
-Do plików posiadających warstwę tekstową wystarczy instalacja podstawowa (`pip install readpdf-pl`) i wywołanie `extract("dokument.pdf")`. Pełna dokumentacja i wyniki benchmarków znajdują się w repozytorium [CzytajPDF](https://github.com/praha6248/CzytajPDF).
+Funkcja `extract(...)` przyjmuje ścieżkę (`str | Path`), `bytes` lub strumień binarny `BinaryIO`. Do plików z poprawną warstwą tekstową wystarczy instalacja podstawowa (`pip install readpdf-pl`). Pełna dokumentacja i benchmarki: [CzytajPDF](https://github.com/praha6248/CzytajPDF).

@@ -4,19 +4,35 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "readpdf-pl"
-version = "0.3.1"
+version = "0.4.0"
 description = "Page-wise Polish PDF text extraction with optional OCR and spelling repair (powered by CzytajPDF)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
-dependencies = ["czytajpdf>=0.3.1,<0.4"]
+keywords = ["pdf", "ocr", "polish", "tesseract", "text-extraction", "rag"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+    "Topic :: Text Processing",
+]
+dependencies = ["czytajpdf>=0.4.0,<0.5"]
+
+[project.scripts]
+readpdf-pl = "czytajpdf._cli:main_pl"
 
 [project.optional-dependencies]
-ocr = ["czytajpdf[ocr]>=0.3.1,<0.4"]
-polish = ["czytajpdf[polish]>=0.3.1,<0.4"]
-pl = ["czytajpdf[polish]>=0.3.1,<0.4"]
-all = ["czytajpdf[ocr,polish]>=0.3.1,<0.4"]
+ocr = ["czytajpdf[ocr]>=0.4.0,<0.5"]
+polish = ["czytajpdf[polish]>=0.4.0,<0.5"]
+pl = ["czytajpdf[polish]>=0.4.0,<0.5"]
+all = ["czytajpdf[ocr,polish]>=0.4.0,<0.5"]
 
 [project.urls]
 Homepage = "https://github.com/praha6248/CzytajPDF"

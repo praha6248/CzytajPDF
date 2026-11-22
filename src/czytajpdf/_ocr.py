@@ -30,7 +30,7 @@ def _render(page, dpi):
 
 
 def recognize(
-    path: Path,
+    source: Path | bytes,
     indices: list[int],
     engine: str,
     correct: bool,
@@ -42,7 +42,7 @@ def recognize(
 
         ensure_dependencies(lang)
     # PDFium is not thread-safe. Serialize access to it and the shared OCR model.
-    with _lock, pdfium.PdfDocument(path) as pdf, ExitStack() as stack:
+    with _lock, pdfium.PdfDocument(source) as pdf, ExitStack() as stack:
         if engine == "tesseract":
             try:
                 from ._tesseract import open_engine, read_page

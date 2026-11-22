@@ -2,17 +2,17 @@
 
 [![CI](https://github.com/praha6248/CzytajPDF/actions/workflows/ci.yml/badge.svg)](https://github.com/praha6248/CzytajPDF/actions/workflows/ci.yml)
 
-**Polskie i angielskie PDF-y oraz skany w jednym wywołaniu Pythona.** CzytajPDF odczytuje dokument strona po stronie. Gdy pismo ma warstwę tekstową, a załącznik jest skanem, dostajesz jeden wynik z informacją, skąd pochodzi tekst każdej strony. Opcjonalna korekta przywraca polskie znaki lub naprawia typowe błędy OCR po angielsku, zachowując oryginalny odczyt do porównania.
+**Polskie i angielskie PDF-y oraz skany w jednym wywołaniu Pythona lub z wiersza poleceń.** CzytajPDF odczytuje dokument strona po stronie. Gdy pismo ma warstwę tekstową, a załącznik jest skanem (albo warstwa tekstowa jest uszkodzona i zawiera „krzaki”), dostajesz jeden wynik z informacją, skąd pochodzi tekst każdej strony. Opcjonalna korekta przywraca polskie znaki lub naprawia typowe błędy OCR po angielsku, zachowując oryginalny odczyt do porównania.
 
-> **English summary:** Page-wise Python library (Apache-2.0) for hybrid Polish and English PDFs — reads embedded text via `pypdf`, automatically falls back to local OCR (`tesserocr` / `rapidocr`) on scanned pages, and optionally applies Polish (`morfeusz2` + `wordfreq`) or English (`wordfreq`) OCR repair with dual-resolution reconciliation while preserving `source` and `raw_text`. Also packaged as `readpdf-pl` and `readpdf-en` from the same repository. See [README.en.md](README.en.md).
+> **English summary:** Page-wise Python library and CLI (Apache-2.0) for hybrid Polish and English PDFs — reads embedded text from file paths, `bytes`, or `BinaryIO` via `pypdf`, automatically falls back to local OCR (`tesserocr` / `rapidocr`) on missing or garbled pages, and optionally repairs OCR spelling while preserving `source` and `raw_text`. Created on the basis of [odwolania2json](https://github.com/praha6248/odwolania2Json). See [README.en.md](README.en.md).
 
 ## Pakiety w repozytorium
 
 Jedno repozytorium dostarcza wspólną bibliotekę bazową oraz dwie paczki językowe o prostszej konfiguracji domyślnej:
 
-- **`czytajpdf`** — pełna biblioteka z parametrem `lang="pl"` (domyślnie) lub `lang="en"`
-- **`readpdf-pl`** (`packages/readpdf-pl`) — paczka dla dokumentów polskich (domyślnie `lang="pl"`)
-- **`readpdf-en`** (`packages/readpdf-en`) — paczka dla dokumentów angielskich (domyślnie `lang="en"`, bez zależności od `morfeusz2`)
+- **`czytajpdf`** — pełna biblioteka i CLI z parametrem `lang="pl"` (domyślnie) lub `lang="en"`
+- **`readpdf-pl`** (`packages/readpdf-pl`) — paczka i CLI dla dokumentów polskich (domyślnie `lang="pl"`)
+- **`readpdf-en`** (`packages/readpdf-en`) — paczka i CLI dla dokumentów angielskich (domyślnie `lang="en"`, bez zależności od `morfeusz2`)
 
 ## Pierwszy odczyt
 
@@ -30,6 +30,15 @@ python -m pip install 'readpdf-pl[all]'
 python -m pip install 'readpdf-en[all]'
 ```
 
+### Wiersz poleceń (CLI)
+
+```sh
+czytajpdf pismo-z-zalacznikami.pdf --ocr --correct --json
+cat skan.pdf | czytajpdf - --ocr --lang en
+```
+
+### Python (ścieżka, `bytes` lub strumień `BinaryIO`)
+
 ```python
 from czytajpdf import extract
 
@@ -37,10 +46,38 @@ dokument = extract("pismo-z-zalacznikami.pdf", ocr=True, correct=True)
 for strona in dokument.pages:
     print(strona.number, strona.source, strona.text)
 
-english_doc = extract("filing-with-exhibits.pdf", ocr=True, correct=True, lang="en")
+# Upload HTTP / S3 bez zapisu pliku tymczasowego:
+with open("zalacznik.pdf", "rb") as f:
+    z_bajtow = extract(f.read(), ocr=True, correct=True, lang="pl")
 ```
 
-Do PDF-ów z warstwą tekstową wystarczy instalacja bez dodatków i wywołanie `extract("pismo.pdf")`. Cały tekst jest dostępny jako `dokument.text`. Numeracja stron zaczyna się od 1. Z paczek językowych można korzystać przez `from readpdf_pl import extract` oraz `from readpdf_en import extract`.
+Do PDF-ów z warstwą tekstową wystarczy instalacja bez dodatków (`pip install czytajpdf`) i wywołanie `extract("pismo.pdf")`. Cały tekst jest dostępny jako `dokument.text`. Numeracja stron zaczyna się od 1. Z paczek językowych można korzystać przez `from readpdf_pl import extract` oraz `from readpdf_en import extract`.
+
+## Przykład do RAG / LLM (z metadanymi pochodzenia)
+
+```python
+from czytajpdf import extract
+
+doc = extract("akta-sprawy.pdf", ocr=True, correct=True)
+chunks = [
+    {
+        "text": page.text,
+        "metadata": {
+            "page": page.number,
+            "source": page.source,        # "pdf", "tesseract" lub "rapidocr"
+            "raw_text": page.raw_text,    # oryginał sprzed korekty do audytu nazw własnych
+        },
+    }
+    for page in doc.pages if page.text.strip()
+]
+```
+
+## Przykład przed i po korekcie (na prawdziwych skanach)
+
+- **Dz.U. 1945 nr 5 poz. 17** (strona mieszanego PDF-a): `ponadkontyugentowych` → `ponadkontyngentowych`
+- **Dz.U. 1958 poz. 100** (ponowny odczyt 300/180 DPI): `KOZPORZĄDZENIE ... w sprawie skiadu` → `ROZPORZĄDZENIE ... w sprawie składu`
+- **U.S. Reports — Brown v. Board of Education (1954)**: `Amendfnent` → `Amendment`; **Roe v. Wade (1973)**: `eriminal` → `criminal`
+- **Uszkodzona warstwa tekstowa („krzaki”)**: strony ze znacznikami `(cid:...)`, znakami `\ufffd`, kontrolnymi/PUA lub bełkotem bez czytelnych słów są automatycznie kierowane do OCR nawet powyżej `min_chars`.
 
 ## Statystyki odczytu
 
@@ -60,19 +97,19 @@ Pomiar obejmuje nagłówki z 18 archiwalnych skanów Dziennika Ustaw. Na pierwot
 | Próbka i wersja biblioteki | Błędy znaków (CER) po korekcie | Błędy słów (WER) po korekcie |
 | --- | ---: | ---: |
 | 12 pierwotnych nagłówków · 0.1.0, RapidOCR | 382 / 2129 · 17,94% | 79 / 293 · 26,96% |
-| Te same 12 nagłówków · 0.2.0 / 0.3.0, Tesseract | 2 / 2129 · 0,09% | 2 / 293 · 0,68% |
-| 3 dodatkowe nagłówki użyte do sprawdzenia i poprawienia obsługi dzielenia słów · 0.2.0 / 0.3.0 | 0 / 593 · 0,00% | 0 / 87 · 0,00% |
-| 3 osobne nagłówki użyte do końcowej weryfikacji · 0.2.0 / 0.3.0 | 1 / 430 · 0,23% | 1 / 67 · 1,49% |
+| Te same 12 nagłówków · 0.2.0+, Tesseract | 2 / 2129 · 0,09% | 2 / 293 · 0,68% |
+| 3 dodatkowe nagłówki użyte do sprawdzenia i poprawienia obsługi dzielenia słów · 0.2.0+ | 0 / 593 · 0,00% | 0 / 87 · 0,00% |
+| 3 osobne nagłówki użyte do końcowej weryfikacji · 0.2.0+ | 1 / 430 · 0,23% | 1 / 67 · 1,49% |
 
 Na pierwotnej próbce surowy Tesseract popełnił 5 błędów słów, a drugi odczyt z korektą usunął 3. Pozostały pomyłki `r.` → `r,` oraz `i` → `1`. W końcowej weryfikacji OCR dodał kropkę po słowie `lutego`.
 
-CER i WER uwzględniają zamiany, wstawienia i pominięcia względem transkrypcji z obrazu. Ujednolicono białe znaki, zachowując interpunkcję i wielkość liter. Wynik dotyczy wycinków z drukowanymi nagłówkami. [Pomiar 0.1.0](benchmarks/rapidocr-0.1.0.json) · [Pomiar 0.2.0/0.3.0](benchmarks/results.json) · [Próbka dodatkowa](benchmarks/holdout.json) · [Weryfikacja końcowa](benchmarks/validation.json) · [Skrypt pomiarowy](benchmarks/score.py)
+CER i WER uwzględniają zamiany, wstawienia i pominięcia względem transkrypcji z obrazu. Ujednolicono białe znaki, zachowując interpunkcję i wielkość liter. Wynik dotyczy wycinków z drukowanymi nagłówkami. [Pomiar 0.1.0](benchmarks/rapidocr-0.1.0.json) · [Pomiar 0.2.0+](benchmarks/results.json) · [Próbka dodatkowa](benchmarks/holdout.json) · [Weryfikacja końcowa](benchmarks/validation.json) · [Skrypt pomiarowy](benchmarks/score.py)
 
 ## Skuteczność angielskiego OCR (`lang="en"`)
 
 Pomiar obejmuje 9 archiwalnych skanów *United States Reports* z Library of Congress (lata 1937–1989). Na 6 dokumentach próbki głównej korekta naprawiła błędy `Amendfnent` → `Amendment` oraz `eriminal` → `criminal` (spadek WER z 17 do 15 na 897 słowach), a na 3 osobnych dokumentach walidacyjnych nie wprowadziła żadnych fałszywych poprawek.
 
-| Próbka angielska (0.3.0, Tesseract `eng`) | Surowy CER / WER | Po korekcie CER | Po korekcie WER |
+| Próbka angielska (Tesseract `eng`) | Surowy CER / WER | Po korekcie CER | Po korekcie WER |
 | --- | ---: | ---: | ---: |
 | 6 skanów *U.S. Reports* (1937–1984) | 0,35% / 1,90% (17 / 897) | 17 / 5745 · 0,30% | 15 / 897 · 1,67% |
 | 3 osobne skany walidacyjne (1943, 1964, 1989) | 0,32% / 1,99% (6 / 301) | 6 / 1871 · 0,32% | 6 / 301 · 1,99% |
@@ -88,4 +125,4 @@ Pomiar obejmuje 9 archiwalnych skanów *United States Reports* z Library of Cong
 
 ## Licencja i pochodzenie
 
-Kod biblioteki jest dostępny na [Apache-2.0](LICENSE). Projekt wykorzystuje logikę z [odwolania2json](https://github.com/praha6248/odwolania2Json). Wagi OCR, słowniki i dane częstości są osobnymi zależnościami na własnych licencjach.
+Kod biblioteki jest dostępny na [Apache-2.0](LICENSE). Biblioteka powstała na podstawie logiki ekstrakcji PDF, OCR i korekty pisowni stworzonej w projekcie [odwolania2json](https://github.com/praha6248/odwolania2Json). Wagi OCR, słowniki i dane częstości są osobnymi zależnościami na własnych licencjach.
