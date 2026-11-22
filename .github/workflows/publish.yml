@@ -4,6 +4,17 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      package:
+        description: Which distribution to publish
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - czytajpdf
+          - readpdf-pl
+          - readpdf-en
 
 permissions:
   contents: read
@@ -16,18 +27,29 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
-      - name: Build and check distributions
+      - name: Build and check all distributions
         run: |
           python -m pip install --upgrade pip build twine
-          python -m build
-          twine check --strict dist/*
+          python -m build . --outdir dist/czytajpdf
+          python -m build packages/readpdf-pl --outdir dist/readpdf-pl
+          python -m build packages/readpdf-en --outdir dist/readpdf-en
+          twine check --strict dist/czytajpdf/* dist/readpdf-pl/* dist/readpdf-en/*
       - uses: actions/upload-artifact@v7
         with:
-          name: dist
-          path: dist/*
+          name: dist-czytajpdf
+          path: dist/czytajpdf/*
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist-readpdf-pl
+          path: dist/readpdf-pl/*
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist-readpdf-en
+          path: dist/readpdf-en/*
 
-  publish:
+  publish-czytajpdf:
     needs: build
+    if: github.event_name == 'release' || inputs.package == 'all' || inputs.package == 'czytajpdf'
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -35,6 +57,42 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
-          name: dist
+          name: dist-czytajpdf
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  publish-readpdf-pl:
+    needs: [build, publish-czytajpdf]
+    if: |
+      always() &&
+      needs.build.result == 'success' &&
+      (github.event_name == 'release' || inputs.package == 'all' || inputs.package == 'readpdf-pl') &&
+      (needs.publish-czytajpdf.result == 'success' || needs.publish-czytajpdf.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist-readpdf-pl
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  publish-readpdf-en:
+    needs: [build, publish-czytajpdf]
+    if: |
+      always() &&
+      needs.build.result == 'success' &&
+      (github.event_name == 'release' || inputs.package == 'all' || inputs.package == 'readpdf-en') &&
+      (needs.publish-czytajpdf.result == 'success' || needs.publish-czytajpdf.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist-readpdf-en
           path: dist
       - uses: pypa/gh-action-pypi-publish@release/v1

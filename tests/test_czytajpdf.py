@@ -1,4 +1,4 @@
-"""Offline unit tests for czytajpdf extraction and spelling repair."""
+"""Offline unit tests for czytajpdf, readpdf-pl, and readpdf-en."""
 
 from __future__ import annotations
 
@@ -13,6 +13,10 @@ from unittest.mock import patch
 from czytajpdf import Document, Page, extract
 
 HAS_POLISH = all(importlib.util.find_spec(pkg) is not None for pkg in ("morfeusz2", "wordfreq"))
+HAS_ENGLISH = importlib.util.find_spec("wordfreq") is not None
+HAS_WRAPPERS = all(
+    importlib.util.find_spec(pkg) is not None for pkg in ("readpdf_pl", "readpdf_en")
+)
 
 
 def _escape_pdf_text(text: str) -> str:
@@ -32,7 +36,7 @@ def _build_pdf(pages_text: list[str | None]) -> bytes:
         kids.append(f"{page_id} 0 R")
         if text is None:
             objects.append(
-                f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>".encode("ascii")
+                b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>"
             )
             continue
         stream = f"BT /F1 12 Tf 20 150 Td ({_escape_pdf_text(text)}) Tj ET".encode("latin-1")
@@ -66,6 +70,8 @@ def _build_pdf(pages_text: list[str | None]) -> bytes:
 class ExtractTests(unittest.TestCase):
     def test_argument_validation(self) -> None:
         with self.assertRaises(ValueError):
+            extract("ignored.pdf", lang="de")  # type: ignore[arg-type]
+        with self.assertRaises(ValueError):
             extract("ignored.pdf", engine="unknown")  # type: ignore[arg-type]
         with self.assertRaises(ValueError):
             extract("ignored.pdf", min_chars=0)
@@ -89,11 +95,13 @@ class ExtractTests(unittest.TestCase):
             self.assertEqual(doc.pages[1], Page(2, "pdf", "", ""))
             self.assertEqual(doc.text, f"{doc.pages[0].text}\n")
 
-    def test_ocr_routing_and_empty_fallback(self) -> None:
-        calls: list[tuple[Path, list[int], str, bool]] = []
+    def test_ocr_routing_lang_and_empty_fallback(self) -> None:
+        calls: list[tuple[Path, list[int], str, bool, str]] = []
 
-        def fake_recognize(path: Path, indices: list[int], engine: str, correct: bool) -> dict[int, tuple[str, str]]:
-            calls.append((path, indices, engine, correct))
+        def fake_recognize(
+            path: Path, indices: list[int], engine: str, correct: bool, lang: str = "pl"
+        ) -> dict[int, tuple[str, str]]:
+            calls.append((path, indices, engine, correct, lang))
             return {1: ("raw ocr", "corrected ocr"), 2: ("   ", "   ")}
 
         fake_mod = types.ModuleType("czytajpdf._ocr")
@@ -102,15 +110,62 @@ class ExtractTests(unittest.TestCase):
         with TemporaryDirectory() as tmp, patch.dict(sys.modules, {"czytajpdf._ocr": fake_mod}):
             pdf_path = Path(tmp) / "mixed.pdf"
             pdf_path.write_bytes(_build_pdf([
-                "Ta strona posiada ponad czterdziesci znakow w warstwie tekstowej.",
+                "This page has well over forty characters in its text layer.",
                 None,
-                "krotki",
+                "short",
             ]))
-            doc = extract(pdf_path, ocr=True, correct=True, engine="tesseract")
-            self.assertEqual(calls, [(pdf_path, [1, 2], "tesseract", True)])
+            doc = extract(pdf_path, ocr=True, correct=True, engine="tesseract", lang="en")
+            self.assertEqual(calls, [(pdf_path, [1, 2], "tesseract", True, "en")])
             self.assertEqual(doc.pages[0].source, "pdf")
             self.assertEqual(doc.pages[1], Page(2, "tesseract", "raw ocr", "corrected ocr"))
-            self.assertEqual(doc.pages[2], Page(3, "pdf", "krotki", "krotki"))
+            self.assertEqual(doc.pages[2], Page(3, "pdf", "short", "short"))
+
+
+@unittest.skipUnless(HAS_WRAPPERS, "readpdf-pl and readpdf-en are not installed")
+class WrapperTests(unittest.TestCase):
+    def test_wrapper_default_languages(self) -> None:
+        import readpdf_en
+        import readpdf_pl
+
+        with TemporaryDirectory() as tmp:
+            pdf_path = Path(tmp) / "scan.pdf"
+            pdf_path.write_bytes(_build_pdf([None]))
+            stub = Document((Page(1, "pdf", "", ""),))
+            with patch.object(readpdf_pl, "_extract", return_value=stub) as mock_pl:
+                readpdf_pl.extract(pdf_path, ocr=True)
+                mock_pl.assert_called_once_with(
+                    pdf_path, ocr=True, correct=False, min_chars=40, engine="tesseract", lang="pl"
+                )
+            with patch.object(readpdf_en, "_extract", return_value=stub) as mock_en:
+                readpdf_en.extract(pdf_path, ocr=True, correct=True)
+                mock_en.assert_called_once_with(
+                    pdf_path, ocr=True, correct=True, min_chars=40, engine="tesseract", lang="en"
+                )
+
+
+@unittest.skipUnless(HAS_ENGLISH, "czytajpdf[english] is not installed")
+class EnglishSpellingTests(unittest.TestCase):
+    def test_correct_text_repairs_english_ocr_confusions_only(self) -> None:
+        from czytajpdf._spell import correct_text, ensure_dependencies, needs_second_read, reconcile_words
+
+        ensure_dependencies("en")
+        source = (
+            "The Amendfnent bars eriminal govern-\nment bans on proseribe "
+            "statutorv rules; Hallford testified."
+        )
+        repaired = correct_text(source, lang="en")
+        self.assertIn("Amendment", repaired)
+        self.assertIn("criminal", repaired)
+        self.assertIn("govern-\nment", repaired)
+        self.assertIn("proscribe", repaired)
+        self.assertIn("statutory", repaired)
+        self.assertIn("Hallford", repaired)
+
+        first = "The Court dgnied relief."
+        second = "The Court denied relief."
+        self.assertTrue(needs_second_read(first, "en"))
+        self.assertFalse(needs_second_read(second, "en"))
+        self.assertEqual(reconcile_words(first, second, "en"), second)
 
 
 @unittest.skipUnless(HAS_POLISH, "czytajpdf[polish] is not installed")
@@ -119,7 +174,7 @@ class PolishSpellingTests(unittest.TestCase):
         from czytajpdf._spell import correct_text
 
         source = "Umowa z Repub-\nliką Włoską oraz zalacznik."
-        repaired = correct_text(source)
+        repaired = correct_text(source, lang="pl")
         self.assertIn("Repub-\nliką", repaired)
         self.assertIn("załącznik.", repaired)
 
@@ -128,12 +183,11 @@ class PolishSpellingTests(unittest.TestCase):
 
         first = "100 KOZPORZĄDZENIE w sprawie skiadu."
         second = "100 ROZPORZĄDZENIE w sprawie składu."
-        self.assertTrue(needs_second_read(first))
-        self.assertFalse(needs_second_read(second))
-        self.assertEqual(reconcile_words(first, second), second)
+        self.assertTrue(needs_second_read(first, "pl"))
+        self.assertFalse(needs_second_read(second, "pl"))
+        self.assertEqual(reconcile_words(first, second, "pl"), second)
 
-        # Multi-character differences or replacements that are not known words stay untouched.
-        unchanged = reconcile_words("100 ABZPORZĄDZENIE xyzq.", "100 ROZPORZĄDZENIE xwzp.")
+        unchanged = reconcile_words("100 ABZPORZĄDZENIE xyzq.", "100 ROZPORZĄDZENIE xwzp.", "pl")
         self.assertEqual(unchanged, "100 ABZPORZĄDZENIE xyzq.")
 
 

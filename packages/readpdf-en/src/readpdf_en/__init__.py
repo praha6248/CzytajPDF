@@ -1,0 +1,22 @@
+"""Page-wise English PDF text extraction powered by CzytajPDF."""
+
+from pathlib import Path
+from typing import Literal
+
+from czytajpdf import Document, Page
+from czytajpdf import extract as _extract
+
+__all__ = ["Document", "Page", "extract"]
+
+
+def extract(
+    path: str | Path,
+    *,
+    ocr: bool = False,
+    correct: bool = False,
+    min_chars: int = 40,
+    engine: Literal["tesseract", "rapidocr"] = "tesseract",
+    lang: Literal["pl", "en"] = "en",
+) -> Document:
+    """Read all pages of a PDF, falling back to English OCR below min_chars."""
+    return _extract(path, ocr=ocr, correct=correct, min_chars=min_chars, engine=engine, lang=lang)

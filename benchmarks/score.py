@@ -1,11 +1,11 @@
-"""Score transcribed Polish legal headings. Run with Python, czytajpdf[ocr,polish] and reportlab."""
+"""Score transcribed Polish and English legal scans. Run with Python, czytajpdf[ocr,polish] and reportlab."""
 
 import argparse
 import json
 import tempfile
 import unicodedata
 from pathlib import Path
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 import pypdfium2 as pdfium
 from reportlab.lib.utils import ImageReader
@@ -28,9 +28,18 @@ def normalize(text):
     return " ".join(unicodedata.normalize("NFC", text).split())
 
 
-def measure(folder, year, top, bottom, reference):
-    url = f"https://api.sejm.gov.pl/eli/acts/DU/{year}/100/text.pdf"
-    with urlopen(url, timeout=60) as response, pdfium.PdfDocument(response.read()) as pdf:
+def parse_row(line: str) -> tuple[str, str, str, str, str]:
+    parts = line.split("|")
+    if len(parts) == 4:
+        year, top, bottom, reference = parts
+        return year, f"https://api.sejm.gov.pl/eli/acts/DU/{year}/100/text.pdf", top, bottom, reference
+    year, url, top, bottom, reference = parts
+    return year, url, top, bottom, reference
+
+
+def measure(folder, year, url, top, bottom, reference, lang):
+    request = Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urlopen(request, timeout=60) as response, pdfium.PdfDocument(response.read()) as pdf:
         image = pdf[0].render(scale=2.5).to_pil().convert("RGB")
     # Crop coordinates were marked on previews fitted into 590 x 740 pixels.
     scale = min(590 / image.width, 740 / image.height)
@@ -40,7 +49,7 @@ def measure(folder, year, top, bottom, reference):
     canvas = Canvas(str(path), pagesize=size)
     canvas.drawImage(ImageReader(crop), 0, 0, *size)
     canvas.save()
-    page, = extract(path, ocr=True, correct=True).pages
+    page, = extract(path, ocr=True, correct=True, lang=lang).pages
     raw, corrected = map(normalize, (page.raw_text, page.text))
     return dict(year=int(year), source=url, reference=reference, raw=raw, corrected=corrected,
                 chars=len(reference), words=len(reference.split()),
@@ -51,9 +60,14 @@ def measure(folder, year, top, bottom, reference):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--sample", choices=["headings", "holdout", "validation"], default="headings")
+    parser.add_argument(
+        "--sample",
+        choices=["headings", "holdout", "validation", "english", "english_validation"],
+        default="headings",
+    )
     sample = parser.parse_args().sample
+    lang = "en" if sample.startswith("english") else "pl"
     lines = Path(__file__).with_name(f"{sample}.txt").read_text(encoding="utf-8").splitlines()
     with tempfile.TemporaryDirectory() as directory:
-        rows = [measure(Path(directory), *line.split("|", 3)) for line in lines]
+        rows = [measure(Path(directory), *parse_row(line), lang=lang) for line in lines]
     print(json.dumps(rows, ensure_ascii=False, indent=2))

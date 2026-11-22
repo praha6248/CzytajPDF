@@ -1,4 +1,4 @@
-"""Read Polish PDF text, preserving the origin and original wording of each page."""
+"""Read Polish and English PDF text, preserving the origin and original wording of each page."""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -31,8 +31,11 @@ def extract(
     correct: bool = False,
     min_chars: int = 40,
     engine: Literal["tesseract", "rapidocr"] = "tesseract",
+    lang: Literal["pl", "en"] = "pl",
 ) -> Document:
     """Read all pages. When enabled, try OCR below min_chars non-whitespace characters."""
+    if lang not in ("pl", "en"):
+        raise ValueError("lang must be pl or en")
     if engine not in ("rapidocr", "tesseract"):
         raise ValueError("engine must be tesseract or rapidocr")
     if min_chars < 1:
@@ -52,7 +55,7 @@ def extract(
                 from ._ocr import recognize
             except ImportError as exc:
                 raise ImportError("OCR requires czytajpdf[ocr]") from exc
-            recognized = recognize(path, indices, engine, correct)
+            recognized = recognize(path, indices, engine, correct, lang)
 
     pages = []
     for index, original in enumerate(native):

@@ -17,9 +17,25 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install base package
-        run: python -m pip install --upgrade pip && python -m pip install .
+      - name: Install base packages
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install . ./packages/readpdf-pl ./packages/readpdf-en
       - name: Run unit tests
+        run: python -m unittest discover -s tests -v
+
+  test-english:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Install English extras without morfeusz2
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ".[ocr,english]" ./packages/readpdf-en
+      - name: Run English and base unit tests
         run: python -m unittest discover -s tests -v
 
   test-full-and-package:
@@ -29,9 +45,15 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
-      - name: Install package with OCR, Polish spelling repair, and packaging tools
-        run: python -m pip install --upgrade pip && python -m pip install ".[ocr,polish]" build twine
+      - name: Install all packages, extras, and build tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ".[ocr,polish,english]" ./packages/readpdf-pl ./packages/readpdf-en build twine
       - name: Run full unit test suite
         run: python -m unittest discover -s tests -v
-      - name: Build and verify distributions
-        run: python -m build && twine check --strict dist/*
+      - name: Build and verify all distributions
+        run: |
+          python -m build . --outdir dist
+          python -m build packages/readpdf-pl --outdir dist
+          python -m build packages/readpdf-en --outdir dist
+          twine check --strict dist/*
