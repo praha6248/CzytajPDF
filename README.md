@@ -7,11 +7,11 @@
 Python 3.10+. Instalacja z GitHuba z obsługą OCR i polskiej korekty:
 
 ```sh
-python -m pip install 'polpdf-text[ocr,polish] @ git+https://github.com/praha6248/CzytajPDF.git'
+python -m pip install 'czytajpdf[ocr,polish] @ git+https://github.com/praha6248/CzytajPDF.git'
 ```
 
 ```python
-from polpdf_text import extract
+from czytajpdf import extract
 
 dokument = extract("pismo-z-zalacznikami.pdf", ocr=True, correct=True)
 for strona in dokument.pages:

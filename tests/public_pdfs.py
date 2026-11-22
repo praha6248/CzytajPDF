@@ -8,7 +8,7 @@ from pypdf import PdfReader, PdfWriter
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen.canvas import Canvas
 
-from polpdf_text import extract
+from czytajpdf import extract
 
 
 def download(directory: Path, year: int, position: int) -> Path:

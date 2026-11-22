@@ -43,7 +43,7 @@ def extract(path: str | Path, *, ocr: bool = False, correct: bool = False,
             try:
                 from ._ocr import recognize
             except ImportError as exc:
-                raise ImportError("OCR requires polpdf-text[ocr]") from exc
+                raise ImportError("OCR requires czytajpdf[ocr]") from exc
             recognized = recognize(path, indices)
 
     pages = []
@@ -57,7 +57,7 @@ def extract(path: str | Path, *, ocr: bool = False, correct: bool = False,
             try:
                 from ._spell import correct_text
             except ImportError as exc:
-                raise ImportError("Spelling repair requires polpdf-text[polish]") from exc
+                raise ImportError("Spelling repair requires czytajpdf[polish]") from exc
             text = correct_text(candidate)
         pages.append(Page(index + 1, "rapidocr", candidate, text))
     return Document(tuple(pages))
