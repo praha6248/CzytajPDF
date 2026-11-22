@@ -69,7 +69,7 @@ jobs:
       (github.event_name == 'release' || inputs.package == 'all' || inputs.package == 'readpdf-pl') &&
       (needs.publish-czytajpdf.result == 'success' || needs.publish-czytajpdf.result == 'skipped')
     runs-on: ubuntu-latest
-    environment: pypi
+    environment: pypi-readpdf-pl
     permissions:
       id-token: write
     steps:
@@ -87,7 +87,7 @@ jobs:
       (github.event_name == 'release' || inputs.package == 'all' || inputs.package == 'readpdf-en') &&
       (needs.publish-czytajpdf.result == 'success' || needs.publish-czytajpdf.result == 'skipped')
     runs-on: ubuntu-latest
-    environment: pypi
+    environment: pypi-readpdf-en
     permissions:
       id-token: write
     steps:
