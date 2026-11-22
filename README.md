@@ -20,22 +20,13 @@ for strona in dokument.pages:
 
 Do PDF-ów z warstwą tekstową wystarczy instalacja bez dodatków i wywołanie `extract("pismo.pdf")`. Cały tekst jest dostępny jako `dokument.text`. Numeracja stron zaczyna się od 1.
 
-## Co pokazała próba na Dzienniku Ustaw
+## Statystyki odczytu
 
-| Materiał | Wynik |
-| --- | --- |
-| [Dz.U. 2024 poz. 1](https://api.sejm.gov.pl/eli/acts/DU/2024/1/text.pdf) | 8 z 8 stron odczytanych z warstwy tekstowej |
-| [Dz.U. 1945 nr 5 poz. 17](https://api.sejm.gov.pl/eli/acts/DU/1945/17/text.pdf) | 2 z 2 stron odczytane z istniejącej warstwy tekstowej archiwalnego skanu |
-| Dokument mieszany złożony z pierwszych stron obu źródeł | Strona współczesna odczytana przez pypdf. Dla historycznej zachowano sam obraz, co uruchomiło RapidOCR i dało 2662 znaki |
-
-Na historycznej stronie OCR odczytał nagłówek jako `TRESC:`. Po korekcie `strona.text` zawierał `TREŚĆ:`, a `strona.raw_text` zachował pierwotny zapis. Inny nagłówek, `DEKRETY`, pozostał błędnie odczytany jako `DEHRETY`. To próba działania na konkretnych dokumentach. Liczba rozpoznanych znaków nie mierzy dokładności.
-
-Aby powtórzyć próbę z katalogu sklonowanego repozytorium:
-
-```sh
-python -m pip install '.[ocr,polish]' reportlab
-python tests/public_pdfs.py
-```
+| Dokument | Strony | Strony z warstwy tekstowej | Strony odczytane przez OCR | Znaki z OCR |
+| --- | ---: | ---: | ---: | ---: |
+| [Dz.U. 2024 poz. 1](https://api.sejm.gov.pl/eli/acts/DU/2024/1/text.pdf) | 8 | 8 | 0 | 0 |
+| [Dz.U. 1945 nr 5 poz. 17](https://api.sejm.gov.pl/eli/acts/DU/1945/17/text.pdf) | 2 | 2 | 0 | 0 |
+| PDF mieszany z pierwszych stron obu dokumentów | 2 | 1 | 1 | 2662 |
 
 ## Jak wybierany jest sposób odczytu
 
