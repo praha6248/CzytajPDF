@@ -1,6 +1,10 @@
 # CzytajPDF
 
+[![CI](https://github.com/praha6248/CzytajPDF/actions/workflows/ci.yml/badge.svg)](https://github.com/praha6248/CzytajPDF/actions/workflows/ci.yml)
+
 **Polskie PDF-y i skany w jednym wywołaniu Pythona.** CzytajPDF odczytuje dokument strona po stronie. Gdy pismo ma warstwę tekstową, a załącznik jest skanem, dostajesz jeden wynik z informacją, skąd pochodzi tekst każdej strony. Opcjonalna korekta przywraca polskie znaki, a oryginalny odczyt pozostaje dostępny do porównania.
+
+> **English summary:** Page-wise Python library (Apache-2.0) for hybrid Polish PDFs — reads embedded text via `pypdf`, automatically falls back to local OCR (`tesserocr` / `rapidocr`) on scanned pages, and optionally applies Polish morphological & frequency spelling repair (`morfeusz2` + `wordfreq`) with dual-resolution word reconciliation while preserving each page's `source` and `raw_text`. See [README.en.md](README.en.md).
 
 ## Pierwszy odczyt
 

@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  test-base:
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.13"]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install base package
+        run: python -m pip install --upgrade pip && python -m pip install .
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -v
+
+  test-full-and-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Install package with OCR, Polish spelling repair, and packaging tools
+        run: python -m pip install --upgrade pip && python -m pip install ".[ocr,polish]" build twine
+      - name: Run full unit test suite
+        run: python -m unittest discover -s tests -v
+      - name: Build and verify distributions
+        run: python -m build && twine check --strict dist/*
