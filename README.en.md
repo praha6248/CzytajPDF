@@ -81,7 +81,7 @@ The English benchmark evaluates 9 archival *United States Reports* scans from th
 
 ## How extraction works
 
-- By default, `pypdf` extracts embedded text. With `ocr=True`, pages with fewer than 40 non-whitespace characters are routed to Tesseract for the chosen language (`lang="pl"` or `lang="en"`; `engine="rapidocr"` selects RapidOCR; `min_chars` changes the threshold). A long garbled text layer can still pass this threshold.
+- By default, `pypdf` extracts embedded text. With `ocr=True`, pages with fewer than 40 non-whitespace characters or a garbled text layer (e.g. `(cid:...)` markers, replacement/control/PUA characters, low alphanumeric share, vowel-less gibberish, or low known-word share when a language lexicon is installed) are routed to Tesseract for the chosen language (`lang="pl"` or `lang="en"`; `engine="rapidocr"` selects RapidOCR; `min_chars` changes the length threshold).
 - `page.source` is `"pdf"`, `"tesseract"`, or `"rapidocr"`. An empty OCR result falls back to the PDF text layer. Output preserves page boundaries without word coordinates or table layout.
 - `correct=True` enables OCR spelling repair (`wordfreq` + `Morfeusz 2` for `lang="pl"`, `wordfreq` + conservative OCR confusion rules for `lang="en"`). Tesseract can perform a second pass at 180 DPI to reconcile unrecognized words against the 300 DPI pass. The original first pass stays available in `page.raw_text`, which helps when auditing proper names.
 - Recognition runs locally. On first use, Tesseract downloads the matching `tessdata_best` model (~12 MB for `pol` or ~15 MB for `eng`), verifies its SHA-256 hash, and caches it locally so subsequent runs work offline.

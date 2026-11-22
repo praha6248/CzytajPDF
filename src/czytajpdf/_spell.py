@@ -7,13 +7,13 @@ import itertools
 import re
 import unicodedata
 
+from ._quality import WORD
 
 def fold(text: str) -> str:
     text = text.replace("ł", "l").replace("Ł", "L")
     return "".join(c for c in unicodedata.normalize("NFD", text) if not unicodedata.combining(c))
 
 
-WORD = re.compile(r"[A-Za-zÀ-žĄĆĘŁŃÓŚŹŻąćęłńóśźż]{3,}")
 L_LOOKALIKES = "tfh"
 MAX_SUBSTITUTIONS = 3
 ACCENT_MARGIN = 0.5

@@ -11,6 +11,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from czytajpdf import Document, Page, extract
+from czytajpdf._quality import is_garbled, needs_ocr
 
 HAS_POLISH = all(importlib.util.find_spec(pkg) is not None for pkg in ("morfeusz2", "wordfreq"))
 HAS_ENGLISH = importlib.util.find_spec("wordfreq") is not None
@@ -119,6 +120,49 @@ class ExtractTests(unittest.TestCase):
             self.assertEqual(doc.pages[0].source, "pdf")
             self.assertEqual(doc.pages[1], Page(2, "tesseract", "raw ocr", "corrected ocr"))
             self.assertEqual(doc.pages[2], Page(3, "pdf", "short", "short"))
+
+    def test_garbled_text_layer_triggers_ocr_even_above_min_chars(self) -> None:
+        self.assertTrue(is_garbled("(cid:12)(cid:45)(cid:78)(cid:99)(cid:104)(cid:112) " * 3))
+        self.assertTrue(is_garbled("A\ufffdB\ufffdC\ufffd " + "tekst " * 10))
+        self.assertTrue(is_garbled("\ue001\ue002\ue003\ue004\ue005" * 12))
+        self.assertTrue(is_garbled("!@#$%^&*()_+-=[]{}|;:',.<>?/~`!@#$%^&*()_+-=[]{}"))
+        self.assertTrue(is_garbled(" ".join("abcdefghijklmnopqrstuvwxyz" * 2)))
+        self.assertTrue(is_garbled("xkcd qzmp wvtr plkm nbgf hjkd fdsa trwq mnbv cxzl"))
+
+        # Valid text layers (including accentless Polish, bullet PUA markers, and numeric tables) stay PDF.
+        self.assertFalse(is_garbled("Pierwsza strona ma pelna warstwe tekstowa bez polskich znakow ale czytelna."))
+        self.assertFalse(is_garbled("\uf0b7 Pierwszy punkt dokumentu\n\uf0b7 Drugi punkt dokumentu z trescia"))
+        self.assertFalse(is_garbled("FV/2026/01/001 1234.50 PLN; FV/2026/01/002 5678.90 PLN; KRS 0000123456"))
+
+        def fake_recognize(
+            path: Path, indices: list[int], engine: str, correct: bool, lang: str = "pl"
+        ) -> dict[int, tuple[str, str]]:
+            return {i: ("czysty odczyt OCR", "czysty odczyt OCR") for i in indices}
+
+        fake_mod = types.ModuleType("czytajpdf._ocr")
+        fake_mod.recognize = fake_recognize  # type: ignore[attr-defined]
+
+        with TemporaryDirectory() as tmp, patch.dict(sys.modules, {"czytajpdf._ocr": fake_mod}):
+            pdf_path = Path(tmp) / "garbled.pdf"
+            pdf_path.write_bytes(_build_pdf([
+                "Pierwsza strona ma pelna warstwe tekstowa bez uszkodzen kodowania.",
+                "(cid:11)(cid:22)(cid:33)(cid:44)(cid:55)(cid:66)(cid:77)(cid:88)(cid:99)(cid:100)(cid:101)",
+                "xkcd qzmp wvtr plkm nbgf hjkd fdsa trwq mnbv cxzl kjhg",
+            ]))
+            doc = extract(pdf_path, ocr=True, lang="pl")
+            self.assertEqual(doc.pages[0].source, "pdf")
+            self.assertEqual(doc.pages[1], Page(2, "tesseract", "czysty odczyt OCR", "czysty odczyt OCR"))
+            self.assertEqual(doc.pages[2], Page(3, "tesseract", "czysty odczyt OCR", "czysty odczyt OCR"))
+
+
+@unittest.skipUnless(HAS_ENGLISH, "czytajpdf[english] is not installed")
+class LexiconGarbledTests(unittest.TestCase):
+    def test_shifted_latin_cmap_is_caught_with_lexicon(self) -> None:
+        shifted = "Uijt jt b csplfo qeg ufyu mbzfs xjui nboz xpset uibu nblf op tfotf bu bmm"
+        self.assertTrue(needs_ocr(shifted, min_chars=40, lang="en"))
+        self.assertFalse(
+            needs_ocr("This is a completely readable English text layer with plenty of words.", min_chars=40, lang="en")
+        )
 
 
 @unittest.skipUnless(HAS_WRAPPERS, "readpdf-pl and readpdf-en are not installed")

@@ -6,6 +6,8 @@ from typing import Literal
 
 from pypdf import PdfReader
 
+from ._quality import needs_ocr
+
 
 @dataclass(frozen=True)
 class Page:
@@ -49,7 +51,7 @@ def extract(
 
     recognized = {}
     if ocr:
-        indices = [i for i, text in enumerate(native) if len("".join(text.split())) < min_chars]
+        indices = [i for i, text in enumerate(native) if needs_ocr(text, min_chars, lang)]
         if indices:
             try:
                 from ._ocr import recognize
