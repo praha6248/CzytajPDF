@@ -28,6 +28,19 @@ Do PDF-ów z warstwą tekstową wystarczy instalacja bez dodatków i wywołanie 
 | [Dz.U. 1945 nr 5 poz. 17](https://api.sejm.gov.pl/eli/acts/DU/1945/17/text.pdf) | 2 | 2 | 0 | 0 |
 | PDF mieszany z pierwszych stron obu dokumentów | 2 | 1 | 1 | 2662 |
 
+## Skuteczność korekty polskiego OCR
+
+Porównanie obejmuje **12 nagłówków z 12 skanów Dziennika Ustaw** (293 słowa, 2129 znaków). Z każdego rocznika co cztery lata od 1950 do 1994 wybrano pozycję 100. Numer pozycji, nazwę aktu, datę i tytuł przepisano z obrazu pierwszej strony. Ten sam wycinek trafił do RapidOCR, a następnie do korekty słownikowej.
+
+| Błędy względem transkrypcji | Surowy OCR | Po korekcie |
+| --- | ---: | ---: |
+| Na poziomie znaków (CER) | 391 / 2129 · 18,37% | 382 / 2129 · 17,94% |
+| Na poziomie słów (WER) | 89 / 293 · 30,38% | 79 / 293 · 26,96% |
+
+Korekta zmniejszyła liczbę błędów słów w 6 nagłówkach, w pozostałych 6 wynik był taki sam. Przywróciła m.in. zapis `działających` i `Żarach`. W skanie z 1994 r. zmieniła błędnie odczytane `stad` na równie błędne `stąd` w miejscu, gdzie wydrukowano `stanowisk`. Na skanach z 1978 i 1986 r. OCR pominął całą linię tytułu. Te pominięcia wliczono do wyniku.
+
+CER i WER liczą wstawienia, usunięcia i zamiany względem transkrypcji, łącznie dla całej próbki. Ujednolicono odstępy i podział na wiersze, zachowując interpunkcję i wielkość liter. Wynik dotyczy drukowanych nagłówków aktów prawnych. [Odczyty, transkrypcje i źródłowe PDF-y](benchmarks/results.json) · [Skrypt pomiarowy](benchmarks/score.py)
+
 ## Jak wybierany jest sposób odczytu
 
 - Domyślnie działa pypdf. Przy `ocr=True` strony z mniej niż 40 znakami po pominięciu białych znaków trafiają do RapidOCR. Próg zmienisz przez `min_chars`. Długa, uszkodzona warstwa tekstowa może przejść ten próg.
