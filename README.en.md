@@ -153,11 +153,11 @@ docs = doc.to_langchain(max_chars=1200)                  # pip install 'czytajpd
 docs = doc.to_llamaindex()                               # pip install 'czytajpdf[llamaindex]'
 ```
 
-- **Languages:** `lang="pl"`, `"en"`, `"pl+en"`, `"auto"` (Polish+English, detected per page) or any Tesseract language (`"de"`, `"fra"`, `"uk"`, …; pinned checksums for de, fr, es, it, cs, uk, ru, pt, nl, sk, la). Spelling repair covers `pl` and `en`; in mixed text, words valid in the other language are protected.
-- **Pre-processing:** `preprocess=True` fixes 90/180/270° rotation (Tesseract OSD) and skew; or pass `"rotate,deskew,denoise,binarize"`. `words` coordinates refer to the processed image.
+- **Languages:** `lang="pl"`, `"en"`, `"pl+en"`, `"auto"` (Polish+English, detected per page) or any Tesseract language (`"de"`, `"fra"`, `"uk"`, …). Spelling repair covers `pl` and `en`; in mixed text, words valid in the other language are protected.
+- **Pre-processing:** `preprocess=True` fixes 90/180/270° rotation and skew; or pass `"rotate,deskew,denoise,binarize"`. `words` coordinates refer to the processed image.
 - **Performance:** `workers=N` runs N OCR processes (scripts need an `if __name__ == "__main__":` guard). `cache=True` (or a directory) skips re-OCR of unchanged pages (key: PDF content, page, options).
 - **Offline:** `czytajpdf download-models` fetches and verifies models; then use `tessdata_dir=` / `CZYTAJPDF_TESSDATA` (a folder of `*.traineddata`, never downloads) or `offline=True` / `CZYTAJPDF_OFFLINE=1`.
-- **Text backend:** `backend="pdfium"` (pypdfium2, Apache/BSD) is often faster than `pypdf` and orders text better. PyMuPDF is deliberately not used because of its AGPL licence.
+- **Text backend:** `backend="pdfium"` is often faster than `pypdf` and orders text better.
 - **Errors:** `CzytajPDFError` and subclasses (`InvalidPDFError`, `PasswordRequiredError`, `MissingDependencyError`, `ModelNotFoundError`) also inherit `ValueError`/`ImportError`/`OSError`. Logs go to `logging.getLogger("czytajpdf")` (`-v` in the CLI). AES-encrypted PDFs need `czytajpdf[crypto]`.
 
 ### Stress benchmark (synthetic full pages)
@@ -175,6 +175,27 @@ CER of Tesseract OCR on rendered pages with common defects. [Script](benchmarks/
 | low contrast | `pl` | 0.36% | 0.36% | 0.36% |
 | clean | `en` | 0.00% | 0.00% | 0.00% |
 | skew 3° + noise | `en` | 33.19% | 12.50% | 0.00% |
+
+### Editing PDFs (replace words)
+
+```sh
+czytajpdf edit contract.pdf --list contract        # numbered occurrences with context
+czytajpdf edit contract.pdf new.pdf -s 5="agreement"  # only the chosen occurrence (id from --list)
+czytajpdf edit contract.pdf new.pdf -r "John=Jonathan" -r "2024=2025" --page 1
+czytajpdf edit scan.pdf new.pdf -r February=March --ocr   # scans: words come from OCR
+```
+
+```python
+from czytajpdf import find_words, edit_pdf
+
+hits = find_words("contract.pdf", "contract")        # WordMatch: id, page, text, bbox, context
+edit_pdf("contract.pdf", "new.pdf", {hits[1]: "agreement"})   # one chosen occurrence
+edit_pdf("contract.pdf", "new.pdf", {"John": "Jonathan"})     # every occurrence
+```
+
+- **Text layer:** the text run holding the word is rebuilt with the new word in the same place, size and colour. The old text is gone (search and copy see the new word). The rest of that run gets the replacement font (`font=` or a system font with Polish letters).
+- **Scans (`--ocr`):** the old word is covered with a patch in the sampled background colour and the new one is drawn on top. This is a visual edit: the scanned image underneath still holds the old pixels, so it is not a redaction.
+- The `EditReport` shows the method used for each change and what was skipped. Rotated pages are skipped. Output is written unencrypted and the input is never modified.
 
 ## How extraction works
 

@@ -153,11 +153,11 @@ docs = doc.to_langchain(max_chars=1200)                   # pip install 'czytajp
 docs = doc.to_llamaindex()                                # pip install 'czytajpdf[llamaindex]'
 ```
 
-- **Języki:** `lang="pl"`, `"en"`, `"pl+en"`, `"auto"` (polski+angielski, język wykrywany dla każdej strony) lub dowolny język Tesseract (`"de"`, `"fra"`, `"uk"`…; wbudowane sumy kontrolne: de, fr, es, it, cs, uk, ru, pt, nl, sk, la). Korekta pisowni działa dla `pl` i `en`; w tekstach mieszanych słowa poprawne w drugim języku są chronione.
-- **Preprocessing:** `preprocess=True` prostuje obrót o 90/180/270° (OSD Tesseracta) i pochylenie skanu; można też wskazać `"rotate,deskew,denoise,binarize"`. Współrzędne `words` odnoszą się do obrazu po obróbce.
+- **Języki:** `lang="pl"`, `"en"`, `"pl+en"`, `"auto"` (polski+angielski, język wykrywany dla każdej strony) lub dowolny język Tesseract (`"de"`, `"fra"`, `"uk"`…). Korekta pisowni działa dla `pl` i `en`; w tekstach mieszanych słowa poprawne w drugim języku są chronione.
+- **Preprocessing:** `preprocess=True` prostuje obrót o 90/180/270° i pochylenie skanu; można też wskazać `"rotate,deskew,denoise,binarize"`. Współrzędne `words` odnoszą się do obrazu po obróbce.
 - **Wydajność:** `workers=N` uruchamia N procesów OCR (w skryptach wymagane `if __name__ == "__main__":`). `cache=True` (lub katalog) pomija ponowne OCR niezmienionych stron (klucz: zawartość PDF, strona i opcje).
 - **Offline:** `czytajpdf download-models` pobiera i weryfikuje modele; potem `tessdata_dir=` / `CZYTAJPDF_TESSDATA` (katalog z `*.traineddata`, nigdy nie pobiera) albo `offline=True` / `CZYTAJPDF_OFFLINE=1`.
-- **Backend tekstu:** `backend="pdfium"` (pypdfium2, Apache/BSD) bywa szybszy od `pypdf` i lepiej układa kolejność czytania. PyMuPDF celowo pominięto ze względu na licencję AGPL.
+- **Backend tekstu:** `backend="pdfium"` bywa szybszy od `pypdf` i lepiej układa kolejność czytania.
 - **Błędy:** `CzytajPDFError` i podklasy (`InvalidPDFError`, `PasswordRequiredError`, `MissingDependencyError`, `ModelNotFoundError`) dziedziczą też po `ValueError`/`ImportError`/`OSError`. Szczegóły działania w logach (`logging.getLogger("czytajpdf")`, w CLI `-v`). PDF-y szyfrowane AES wymagają `czytajpdf[crypto]`.
 
 ### Test wytrzymałościowy (syntetyczne pełne strony)
@@ -175,6 +175,27 @@ CER po OCR Tesseract na wyrenderowanych stronach z typowymi wadami. [Skrypt](ben
 | low contrast | `pl` | 0.36% | 0.36% | 0.36% |
 | clean | `en` | 0.00% | 0.00% | 0.00% |
 | skew 3° + noise | `en` | 33.19% | 12.50% | 0.00% |
+
+### Edycja PDF-ów (zamiana słów)
+
+```sh
+czytajpdf edit umowa.pdf --list umowa            # ponumerowane wystąpienia z kontekstem
+czytajpdf edit umowa.pdf nowa.pdf -s 5="kontrakt"   # tylko wybrane wystąpienie (id z --list)
+czytajpdf edit umowa.pdf nowa.pdf -r "Jan=Janusz" -r "2024=2025" --page 1
+czytajpdf edit skan.pdf nowy.pdf -r lutego=marca --ocr   # skany: słowa z OCR
+```
+
+```python
+from czytajpdf import find_words, edit_pdf
+
+trafienia = find_words("umowa.pdf", "umowa")      # WordMatch: id, page, text, bbox, context
+edit_pdf("umowa.pdf", "nowa.pdf", {trafienia[1]: "kontrakt"})   # jedno, wybrane wystąpienie
+edit_pdf("umowa.pdf", "nowa.pdf", {"Jan": "Janusz"})            # wszystkie wystąpienia
+```
+
+- **Tekst z warstwy tekstowej:** fragment tekstu zawierający słowo jest odtwarzany z nowym słowem w tym samym miejscu, rozmiarze i kolorze. Stary tekst znika (wyszukiwanie i kopiowanie widzą nowe słowo). Reszta tego fragmentu dostaje czcionkę zastępczą (`font=` lub systemowa z polskimi znakami).
+- **Skany (`--ocr`):** stare słowo jest zakrywane łatą w kolorze tła, a nowe rysowane na wierzchu. To zmiana wizualna: obraz skanu pod spodem nadal zawiera stare piksele, więc to nie jest redakcja.
+- Raport (`EditReport`) wskazuje metodę dla każdej zamiany i pominięte przypadki. Obracane strony są pomijane. Wynik zapisywany jest bez szyfrowania, a plik wejściowy nie jest zmieniany.
 
 ## Jak wybierany jest sposób odczytu
 

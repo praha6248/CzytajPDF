@@ -384,6 +384,61 @@ class BatchCliTests(unittest.TestCase):
         mock.assert_called_once_with(["pl", "de"], "/models", include_osd=True)
 
 
+def _has_font() -> bool:
+    if not HAS_OCR:
+        return False
+    from czytajpdf._edit import FontNotFoundError, find_font
+
+    try:
+        find_font()
+    except FontNotFoundError:
+        return False
+    return True
+
+
+@unittest.skipUnless(_has_font(), "needs czytajpdf[ocr] and a system TrueType font")
+class EditTests(unittest.TestCase):
+    PDF = _build_pdf(["Umowa zostala zawarta miedzy stronami. Umowa trwa rok."])
+
+    def test_find_and_replace_selected_occurrence(self) -> None:
+        from czytajpdf import edit_pdf, find_words
+
+        matches = find_words(self.PDF, "umowa")
+        self.assertEqual([m.text for m in matches], ["Umowa", "Umowa"])
+        self.assertTrue(all(m.context and len(m.bbox) == 4 for m in matches))
+        with TemporaryDirectory() as tmp:
+            out = Path(tmp) / "out.pdf"
+            report = edit_pdf(self.PDF, out, {matches[1]: "kontrakt"})
+            self.assertEqual((report.count, report.replacements[0].method), (1, "text"))
+            self.assertEqual(extract(out).text.strip(), "Umowa zostala zawarta miedzy stronami. kontrakt trwa rok.")
+
+    def test_replace_all_with_polish_letters_and_edit_objects(self) -> None:
+        from czytajpdf import edit_pdf
+        from czytajpdf._edit import Edit
+
+        with TemporaryDirectory() as tmp:
+            out = Path(tmp) / "out.pdf"
+            report = edit_pdf(self.PDF, out, {"Umowa": "Zażółć", "stronami": "gęślą"}, match_case=True)
+            self.assertEqual(report.count, 3)
+            self.assertEqual(extract(out).text.strip(), "Zażółć zostala zawarta miedzy gęślą. Zażółć trwa rok.")
+            report = edit_pdf(self.PDF, out, [Edit("umowa", "x", occurrence=1), Edit("brak", "y")])
+            self.assertEqual((report.count, report.skipped), (1, (("brak", "no match"),)))
+            self.assertTrue(extract(out).text.startswith("x zostala"))
+
+    def test_edit_cli(self) -> None:
+        with TemporaryDirectory() as tmp:
+            src, out = Path(tmp) / "in.pdf", Path(tmp) / "out.pdf"
+            src.write_bytes(self.PDF)
+            status, listing, _ = BatchCliTests._run(self, "edit", src, "--list", "trwa")
+            self.assertEqual(status, 0)
+            ident = listing.split("]")[0].lstrip("[")
+            status, _, err = BatchCliTests._run(self, "edit", src, out, "-s", f"{ident}=trwał", "-r", "rok=miesiąc")
+            self.assertEqual(status, 0, err)
+            self.assertTrue(extract(out).text.strip().endswith("trwał miesiąc."))
+            status, _, _ = BatchCliTests._run(self, "edit", src, out, "-r", "nieistnieje=x")
+            self.assertEqual(status, 1)  # nothing replaced
+
+
 @unittest.skipUnless(INTEGRATION and HAS_OCR, "set CZYTAJPDF_INTEGRATION=1 (needs czytajpdf[ocr] and network/models)")
 class RealOcrTests(unittest.TestCase):
     """Real Tesseract runs on a synthetic scan. Opt-in because models are downloaded on first use."""
@@ -437,6 +492,18 @@ class RealOcrTests(unittest.TestCase):
             result = Path(tmp) / "searchable.pdf"
             self.assertEqual(make_searchable(multi, result), [1, 2, 3])
             self.assertIn("MINISTRA", PdfReader(result).pages[2].extract_text())
+
+    def test_edit_scanned_word_with_ocr(self) -> None:
+        from czytajpdf import edit_pdf, find_words
+
+        scan = self._scan()
+        self.assertEqual(find_words(scan, "MINISTRA"), [])  # no text layer without ocr=True
+        with TemporaryDirectory() as tmp:
+            out = Path(tmp) / "out.pdf"
+            report = edit_pdf(scan, out, {"MINISTRA": "PREZESA"}, ocr=True)
+            self.assertEqual(report.replacements[0].method, "overlay")
+            self.assertTrue(report.replacements[0].residual)
+            self.assertIn("PREZESA", extract(out, ocr=True).text)
 
 
 if __name__ == "__main__":

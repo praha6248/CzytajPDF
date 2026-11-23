@@ -8,11 +8,12 @@
 - **Performance:** `workers=N` for parallel OCR, on-disk `cache=`.
 - **Pre-processing:** rotation (OSD), deskew, denoise, binarize.
 - **`correct="suggest"`** reports changes without applying them.
-- **Native text backends:** `backend="pdfium"`.
+- **Native text backends:** an alternative `backend=`.
 - **Languages:** `pl+en`, `auto`, and any Tesseract language (de, fr, es, it, cs, uk, ru, pt, nl, sk, la have pinned checksums).
 - **Streaming:** `extract_iter()`; page selection via `pages=`.
 - **Integrations:** `Document.chunks()`, `to_langchain()`, `to_llamaindex()`.
 - **Offline use:** `tessdata_dir=`, `CZYTAJPDF_TESSDATA`, `offline=`, `CZYTAJPDF_OFFLINE`, `download_models()`.
+- **Editing:** `find_words()` / `edit_pdf()` and `czytajpdf edit` replace chosen words in text-layer PDFs and (with OCR) scans.
 - **Hygiene:** `py.typed`, exception hierarchy, `password=`, `logging`, `examples/`, synthetic stress benchmark.
 - **Breaking (internal):** `czytajpdf._ocr.recognize` now takes an `OcrOptions` and returns `OcrPage` objects; `extract()`'s public signature is backwards compatible. `lang` is no longer restricted to `pl`/`en`. `readpdf-pl`/`readpdf-en` forward all `extract()` keywords.
 

@@ -20,7 +20,7 @@ def _build_parser(prog: str | None, default_lang: str) -> argparse.ArgumentParse
     parser = argparse.ArgumentParser(
         prog=prog,
         description="Extract text from hybrid Polish and English PDFs with optional local OCR and spelling repair.",
-        epilog="Other command: `%(prog)s download-models [--lang pl en ...] [--dir DIR]` prefetches OCR models for offline use.",
+        epilog="Other commands: `%(prog)s edit IN.pdf OUT.pdf -r old=new` replaces words; `%(prog)s download-models [--lang pl en ...] [--dir DIR]` prefetches OCR models for offline use.",
     )
     parser.add_argument(
         "path", nargs="+",
@@ -116,10 +116,80 @@ def _download_models(argv: Sequence[str], prog: str | None) -> int:
     return 0
 
 
+def _edit_command(argv: Sequence[str], prog: str | None, default_lang: str) -> int:
+    parser = argparse.ArgumentParser(
+        prog=f"{prog or 'czytajpdf'} edit",
+        description="Replace words in a PDF. List words first (--list), then pick by text or by id.",
+    )
+    parser.add_argument("input", help="Input PDF.")
+    parser.add_argument("output", nargs="?", help="Output PDF (required unless --list).")
+    parser.add_argument("--list", nargs="?", const="", metavar="QUERY",
+                        help="Print numbered words (or only those matching QUERY) with context, then exit.")
+    parser.add_argument("-r", "--replace", action="append", default=[], metavar="OLD=NEW",
+                        help="Replace every occurrence of OLD with NEW (repeatable).")
+    parser.add_argument("-s", "--select", action="append", default=[], metavar="ID=NEW",
+                        help="Replace the single word with this id from `--list` (repeatable).")
+    parser.add_argument("--page", type=int, help="Limit -r to one page.")
+    parser.add_argument("--occurrence", type=int, help="With -r: only the n-th match (1-based).")
+    parser.add_argument("--match-case", action="store_true", help="Case-sensitive matching.")
+    parser.add_argument("--partial", action="store_true", help="Allow matches inside longer words.")
+    parser.add_argument("--font", help="TrueType font for the new text (default: a system font with Polish letters).")
+    parser.add_argument("--ocr", action="store_true", help="Also read pages without a text layer (scans) with OCR.")
+    parser.add_argument("--lang", default=default_lang, help=f"OCR language (default: {default_lang}).")
+    parser.add_argument("--password", help="Password for encrypted PDFs.")
+    args = parser.parse_args(argv)
+    from . import edit_pdf, find_words
+    from ._edit import Edit
+
+    common = dict(match_case=args.match_case, whole_word=not args.partial, ocr=args.ocr, lang=args.lang,
+                  password=args.password)
+    try:
+        if args.list is not None:
+            # ids always index the full word list, so they can be passed to --select unchanged
+            query = args.list if args.match_case else args.list.lower()
+            for match in find_words(args.input, None, **common):
+                probe = match.text if args.match_case else match.text.lower()
+                if not query or (probe == query if not args.partial else query in probe):
+                    print(match)
+            return 0
+        if not args.output:
+            parser.error("output PDF required (or use --list)")
+        if not (args.replace or args.select):
+            parser.error("give at least one --replace or --select")
+        edits = []
+        for item in args.replace:
+            old, sep, new = item.partition("=")
+            if not sep or not old:
+                parser.error(f"--replace expects OLD=NEW, got {item!r}")
+            edits.append(Edit(old, new, args.page, args.occurrence))
+        replacements: dict = {}
+        if args.select:
+            words = find_words(args.input, None, **common)
+            for item in args.select:
+                ident, sep, new = item.partition("=")
+                if not sep or not ident.isdigit() or int(ident) >= len(words):
+                    parser.error(f"--select expects ID=NEW with an id from --list, got {item!r}")
+                replacements[words[int(ident)]] = new
+        report = edit_pdf(args.input, args.output, [*edits] if not replacements else {**replacements,
+                          **{e.old: e.new for e in edits}}, font=args.font, **common)
+    except (CzytajPDFError, OSError, ValueError, TypeError, ImportError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    for item in report.replacements:
+        note = " (old text may remain in the text layer)" if item.residual else ""
+        print(f"p.{item.page}: {item.old!r} -> {item.new!r} [{item.method}]{note}", file=sys.stderr)
+    for what, reason in report.skipped:
+        print(f"skipped {what!r}: {reason}", file=sys.stderr)
+    print(f"{report.count} replacement(s) written to {args.output}", file=sys.stderr)
+    return 0 if report.count else 1
+
+
 def main(argv: Sequence[str] | None = None, *, default_lang: Literal["pl", "en"] = "pl",
          prog: str | None = None) -> int:
     """CLI entrypoint returning process exit status (0 ok, 1 when any file failed, 2 for usage errors)."""
     argv = list(sys.argv[1:] if argv is None else argv)
+    if argv[:1] == ["edit"]:
+        return _edit_command(argv[1:], prog, default_lang)
     if argv[:1] == ["download-models"]:
         return _download_models(argv[1:], prog)
     parser = _build_parser(prog, default_lang)

@@ -25,8 +25,8 @@ __version__ = "0.5.0"
 
 __all__ = [
     "Chunk", "Correction", "CzytajPDFError", "Document", "InvalidPDFError", "MissingDependencyError",
-    "ModelNotFoundError", "Page", "PasswordRequiredError", "Word", "download_models", "extract",
-    "extract_iter", "make_searchable", "parse_pages",
+    "ModelNotFoundError", "Page", "PasswordRequiredError", "Word", "download_models", "edit_pdf", "extract",
+    "extract_iter", "find_words", "make_searchable", "parse_pages",
 ]
 
 logging.getLogger("czytajpdf").addHandler(logging.NullHandler())
@@ -165,6 +165,20 @@ def make_searchable(*args, **kwargs):
     from ._searchable import make_searchable as _make
 
     return _make(*args, **kwargs)
+
+
+def find_words(*args, **kwargs):
+    """List words/phrases with ids and boxes so one can be chosen for :func:`edit_pdf`."""
+    from ._edit import find_words as _find
+
+    return _find(*args, **kwargs)
+
+
+def edit_pdf(*args, **kwargs):
+    """Replace words in a PDF; see :func:`czytajpdf._edit.edit_pdf`."""
+    from ._edit import edit_pdf as _edit
+
+    return _edit(*args, **kwargs)
 
 
 def download_models(languages: Iterable[str] = ("pl", "en"), directory: str | Path | None = None,
