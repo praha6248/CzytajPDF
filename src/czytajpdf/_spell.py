@@ -200,12 +200,38 @@ def correct_word(token: str, min_zipf: float | None = None, lang: str = "pl") ->
 SPELL_TOKEN = re.compile(r"(?P<split>[^\W\d_]+[-‐]\s*\n[ \t]*[^\W\d_]+)|" + WORD.pattern)
 
 
-def correct_text(text: str, min_zipf: float | None = None, lang: str = "pl") -> str:
-    """Repair every word of an OCR text that is not in the lexicon."""
-    return SPELL_TOKEN.sub(
-        lambda m: m[0] if m["split"] else correct_word(m[0], min_zipf, lang=lang),
-        text,
-    )
+def correct_text(text: str, min_zipf: float | None = None, lang: str = "pl", protect: tuple[str, ...] = ()) -> str:
+    """Repair every word of an OCR text that is not in the lexicon.
+
+    Words that are valid in one of the ``protect`` languages (e.g. English quotations inside a
+    Polish page) are left untouched.
+    """
+    def repair(match: re.Match) -> str:
+        if match["split"]:
+            return match[0]
+        word = match[0]
+        if any(word.lower() in lexicon(other)[0] for other in protect):
+            return word
+        return correct_word(word, min_zipf, lang=lang)
+
+    return SPELL_TOKEN.sub(repair, text)
+
+
+def diff_corrections(raw: str, fixed: str) -> tuple[tuple[str, str, int], ...]:
+    """Word-level changes between the raw and the repaired text as ``(raw, fixed, offset_in_raw)``."""
+    if raw == fixed:
+        return ()
+    old = [(m.group(), m.start()) for m in re.finditer(r"\S+", raw)]
+    new = [m.group() for m in re.finditer(r"\S+", fixed)]
+    changes = []
+    matcher = SequenceMatcher(None, [t for t, _ in old], new, autojunk=False)
+    for tag, a, b, c, d in matcher.get_opcodes():
+        if tag == "replace" and b - a == d - c:
+            changes.extend((old[i][0], new[j], old[i][1]) for i, j in zip(range(a, b), range(c, d)))
+        elif tag in ("replace", "delete", "insert"):
+            before = " ".join(t for t, _ in old[a:b])
+            changes.append((before, " ".join(new[c:d]), old[a][1] if a < len(old) else len(raw)))
+    return tuple(changes)
 
 
 def needs_second_read(text: str, lang: str = "pl") -> bool:

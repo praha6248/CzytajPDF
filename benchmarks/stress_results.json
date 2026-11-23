@@ -1,0 +1,182 @@
+[
+  {
+    "case": "clean",
+    "lang": "pl",
+    "chars": 274,
+    "plain": {
+      "cer": 0.36,
+      "wer": 2.63,
+      "confidence": 95.0
+    },
+    "preprocess": {
+      "cer": 0.36,
+      "wer": 2.63,
+      "confidence": 95.0
+    },
+    "preprocess_denoise": {
+      "cer": 0.36,
+      "wer": 2.63,
+      "confidence": 95.0
+    }
+  },
+  {
+    "case": "skew 2°",
+    "lang": "pl",
+    "chars": 274,
+    "plain": {
+      "cer": 0.36,
+      "wer": 2.63,
+      "confidence": 95.0
+    },
+    "preprocess": {
+      "cer": 0.36,
+      "wer": 2.63,
+      "confidence": 94.0
+    },
+    "preprocess_denoise": {
+      "cer": 0.36,
+      "wer": 2.63,
+      "confidence": 94.0
+    }
+  },
+  {
+    "case": "skew 4° + blur",
+    "lang": "pl",
+    "chars": 274,
+    "plain": {
+      "cer": 27.74,
+      "wer": 36.84,
+      "confidence": 94.0
+    },
+    "preprocess": {
+      "cer": 0.36,
+      "wer": 2.63,
+      "confidence": 95.0
+    },
+    "preprocess_denoise": {
+      "cer": 0.36,
+      "wer": 2.63,
+      "confidence": 95.0
+    }
+  },
+  {
+    "case": "rotated 90°",
+    "lang": "pl",
+    "chars": 274,
+    "plain": {
+      "cer": 89.42,
+      "wer": 100.0,
+      "confidence": 39.0
+    },
+    "preprocess": {
+      "cer": 0.36,
+      "wer": 2.63,
+      "confidence": 95.0
+    },
+    "preprocess_denoise": {
+      "cer": 0.36,
+      "wer": 2.63,
+      "confidence": 95.0
+    }
+  },
+  {
+    "case": "upside down",
+    "lang": "pl",
+    "chars": 274,
+    "plain": {
+      "cer": 89.78,
+      "wer": 100.0,
+      "confidence": 41.0
+    },
+    "preprocess": {
+      "cer": 0.36,
+      "wer": 2.63,
+      "confidence": 95.0
+    },
+    "preprocess_denoise": {
+      "cer": 0.36,
+      "wer": 2.63,
+      "confidence": 95.0
+    }
+  },
+  {
+    "case": "speckle noise",
+    "lang": "pl",
+    "chars": 274,
+    "plain": {
+      "cer": 14.6,
+      "wer": 39.47,
+      "confidence": 75.0
+    },
+    "preprocess": {
+      "cer": 14.6,
+      "wer": 39.47,
+      "confidence": 75.0
+    },
+    "preprocess_denoise": {
+      "cer": 0.73,
+      "wer": 5.26,
+      "confidence": 93.0
+    }
+  },
+  {
+    "case": "low contrast",
+    "lang": "pl",
+    "chars": 274,
+    "plain": {
+      "cer": 0.36,
+      "wer": 2.63,
+      "confidence": 95.0
+    },
+    "preprocess": {
+      "cer": 0.36,
+      "wer": 2.63,
+      "confidence": 95.0
+    },
+    "preprocess_denoise": {
+      "cer": 0.36,
+      "wer": 2.63,
+      "confidence": 95.0
+    }
+  },
+  {
+    "case": "clean",
+    "lang": "en",
+    "chars": 232,
+    "plain": {
+      "cer": 0.0,
+      "wer": 0.0,
+      "confidence": 95.0
+    },
+    "preprocess": {
+      "cer": 0.0,
+      "wer": 0.0,
+      "confidence": 95.0
+    },
+    "preprocess_denoise": {
+      "cer": 0.0,
+      "wer": 0.0,
+      "confidence": 95.0
+    }
+  },
+  {
+    "case": "skew 3° + noise",
+    "lang": "en",
+    "chars": 232,
+    "plain": {
+      "cer": 33.19,
+      "wer": 57.14,
+      "confidence": 74.0
+    },
+    "preprocess": {
+      "cer": 12.5,
+      "wer": 40.0,
+      "confidence": 72.0
+    },
+    "preprocess_denoise": {
+      "cer": 0.0,
+      "wer": 0.0,
+      "confidence": 95.0
+    }
+  }
+]

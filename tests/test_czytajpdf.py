@@ -14,6 +14,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from czytajpdf import Document, Page, extract
+from czytajpdf._types import OcrPage
 from czytajpdf._cli import main as cli_main
 from czytajpdf._cli import main_en, main_pl
 from czytajpdf._quality import is_garbled, needs_ocr
@@ -77,13 +78,23 @@ def _build_pdf(pages_text: list[str | None]) -> bytes:
 class ExtractTests(unittest.TestCase):
     def test_argument_validation(self) -> None:
         with self.assertRaises(ValueError):
-            extract("ignored.pdf", lang="de")  # type: ignore[arg-type]
+            extract("ignored.pdf", lang="bad lang!")
         with self.assertRaises(ValueError):
             extract("ignored.pdf", engine="unknown")  # type: ignore[arg-type]
         with self.assertRaises(ValueError):
             extract("ignored.pdf", min_chars=0)
         with self.assertRaises(ValueError):
             extract("ignored.pdf", ocr=False, correct=True)
+        with self.assertRaises(ValueError):
+            extract("ignored.pdf", workers=0)
+        with self.assertRaises(ValueError):
+            extract("ignored.pdf", backend="mupdf")  # type: ignore[arg-type]
+        with self.assertRaises(ValueError):
+            extract("ignored.pdf", ocr=True, correct="maybe")  # type: ignore[arg-type]
+        with self.assertRaises(ValueError):  # spelling repair exists for pl/en only
+            extract("ignored.pdf", ocr=True, correct=True, lang="de")
+        with self.assertRaises(ValueError):
+            extract("ignored.pdf", preprocess="sharpen")
 
     def test_native_extraction_preserves_page_numbers(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -103,13 +114,11 @@ class ExtractTests(unittest.TestCase):
             self.assertEqual(doc.text, f"{doc.pages[0].text}\n")
 
     def test_ocr_routing_lang_and_empty_fallback(self) -> None:
-        calls: list[tuple[Path, list[int], str, bool, str]] = []
+        calls: list[tuple] = []
 
-        def fake_recognize(
-            path: Path, indices: list[int], engine: str, correct: bool, lang: str = "pl"
-        ) -> dict[int, tuple[str, str]]:
-            calls.append((path, indices, engine, correct, lang))
-            return {1: ("raw ocr", "corrected ocr"), 2: ("   ", "   ")}
+        def fake_recognize(path, indices, options, executor=None, workers=1):
+            calls.append((path, indices, options.engine, options.correct, options.spell_langs))
+            return {1: OcrPage("raw ocr", "corrected ocr"), 2: OcrPage("   ", "   ")}
 
         fake_mod = types.ModuleType("czytajpdf._ocr")
         fake_mod.recognize = fake_recognize  # type: ignore[attr-defined]
@@ -122,7 +131,7 @@ class ExtractTests(unittest.TestCase):
                 "short",
             ]))
             doc = extract(pdf_path, ocr=True, correct=True, engine="tesseract", lang="en")
-            self.assertEqual(calls, [(pdf_path, [1, 2], "tesseract", True, "en")])
+            self.assertEqual(calls, [(pdf_path, [1, 2], "tesseract", True, ("en",))])
             self.assertEqual(doc.pages[0].source, "pdf")
             self.assertEqual(doc.pages[1], Page(2, "tesseract", "raw ocr", "corrected ocr"))
             self.assertEqual(doc.pages[2], Page(3, "pdf", "short", "short"))
@@ -140,10 +149,8 @@ class ExtractTests(unittest.TestCase):
         self.assertFalse(is_garbled("\uf0b7 Pierwszy punkt dokumentu\n\uf0b7 Drugi punkt dokumentu z trescia"))
         self.assertFalse(is_garbled("FV/2026/01/001 1234.50 PLN; FV/2026/01/002 5678.90 PLN; KRS 0000123456"))
 
-        def fake_recognize(
-            path: Path, indices: list[int], engine: str, correct: bool, lang: str = "pl"
-        ) -> dict[int, tuple[str, str]]:
-            return {i: ("czysty odczyt OCR", "czysty odczyt OCR") for i in indices}
+        def fake_recognize(path, indices, options, executor=None, workers=1):
+            return {i: OcrPage("czysty odczyt OCR", "czysty odczyt OCR") for i in indices}
 
         fake_mod = types.ModuleType("czytajpdf._ocr")
         fake_mod.recognize = fake_recognize  # type: ignore[attr-defined]
@@ -177,9 +184,9 @@ class ExtractTests(unittest.TestCase):
 
         seen_sources: list[object] = []
 
-        def fake_recognize(source, indices, engine, correct, lang="pl"):
+        def fake_recognize(source, indices, options, executor=None, workers=1):
             seen_sources.append(source)
-            return {1: ("ocr from bytes", "ocr from bytes")}
+            return {1: OcrPage("ocr from bytes", "ocr from bytes")}
 
         fake_mod = types.ModuleType("czytajpdf._ocr")
         fake_mod.recognize = fake_recognize  # type: ignore[attr-defined]
@@ -226,27 +233,37 @@ class ExtractTests(unittest.TestCase):
         self.assertEqual(missing_status, 1)
         self.assertIn("error:", err.getvalue())
 
-        with patch("czytajpdf._cli.extract", return_value=Document((Page(1, "pdf", "ok", "ok"),))) as mock:
+        defaults = dict(
+            ocr=False, correct=False, min_chars=40, engine="tesseract", pages=None, backend="pypdf",
+            password=None, workers=1, preprocess=False, cache=False, tessdata_dir=None, offline=None,
+        )
+        with patch("czytajpdf._cli.extract_iter", side_effect=lambda *a, **k: iter([Page(1, "pdf", "ok", "ok")])) as mock:
             with redirect_stdout(io.StringIO()):
                 self.assertEqual(main_pl(["a.pdf"]), 0)
-            mock.assert_called_with("a.pdf", ocr=False, correct=False, min_chars=40, engine="tesseract", lang="pl")
+            mock.assert_called_with("a.pdf", lang="pl", **defaults)
             with redirect_stdout(io.StringIO()):
                 self.assertEqual(main_en(["a.pdf"]), 0)
-            mock.assert_called_with("a.pdf", ocr=False, correct=False, min_chars=40, engine="tesseract", lang="en")
+            mock.assert_called_with("a.pdf", lang="en", **defaults)
 
 
 @unittest.skipUnless(HAS_OCR, "czytajpdf[ocr] is not installed")
 class OcrBytesTests(unittest.TestCase):
     def test_recognize_accepts_pdf_bytes(self) -> None:
         from czytajpdf._ocr import recognize
+        from czytajpdf._tesseract import TessResult
+        from czytajpdf._types import OcrOptions, Word
 
         pdf_bytes = _build_pdf([None])
-        with patch("czytajpdf._tesseract.open_engine") as mock_open, patch(
-            "czytajpdf._tesseract.read_page", return_value="ocr text"
-        ):
+        options = OcrOptions("tesseract", False, ("eng",), ("en",))
+        scan = TessResult("ocr text", (Word("ocr", (0, 0, 1, 1), 90.0),), 90.0)
+        with patch("czytajpdf._models.resolve", return_value=Path(".")), patch(
+            "czytajpdf._tesseract.open_engine"
+        ) as mock_open, patch("czytajpdf._tesseract.read_page", return_value=scan):
             mock_open.return_value.__enter__.return_value = object()
-            result = recognize(pdf_bytes, [0], "tesseract", False, "en")
-        self.assertEqual(result, {0: ("ocr text", "ocr text")})
+            result = recognize(pdf_bytes, [0], options)
+        page = result[0]
+        self.assertEqual((page.raw, page.corrected, page.confidence, page.lang), ("ocr text", "ocr text", 90.0, "en"))
+        self.assertEqual(page.words, scan.words)
 
 
 @unittest.skipUnless(HAS_ENGLISH, "czytajpdf[english] is not installed")
@@ -272,12 +289,12 @@ class WrapperTests(unittest.TestCase):
             with patch.object(readpdf_pl, "_extract", return_value=stub) as mock_pl:
                 readpdf_pl.extract(pdf_path, ocr=True)
                 mock_pl.assert_called_once_with(
-                    pdf_path, ocr=True, correct=False, min_chars=40, engine="tesseract", lang="pl"
+                    pdf_path, ocr=True, lang="pl"
                 )
             with patch.object(readpdf_en, "_extract", return_value=stub) as mock_en:
                 readpdf_en.extract(pdf_path, ocr=True, correct=True)
                 mock_en.assert_called_once_with(
-                    pdf_path, ocr=True, correct=True, min_chars=40, engine="tesseract", lang="en"
+                    pdf_path, ocr=True, correct=True, lang="en"
                 )
 
 

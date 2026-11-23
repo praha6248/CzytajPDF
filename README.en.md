@@ -116,6 +116,66 @@ The English benchmark evaluates 9 archival *United States Reports* scans from th
 
 [English results](benchmarks/english_results.json) · [English validation](benchmarks/english_validation.json)
 
+## What's new in 0.5
+
+### Batch CLI
+
+```sh
+czytajpdf akta/ --ocr --correct --workers 4 --preprocess -o out/ --format md --progress
+czytajpdf 'scans/**/*.pdf' --ocr --pages 1-5 --min-confidence 70 --skip-existing -o out/
+czytajpdf scan.pdf --ocr --searchable -o out/        # out/scan.searchable.pdf with a text layer
+czytajpdf download-models --lang pl en --osd --dir ./tessdata
+```
+
+Inputs may be files, directories (recursive), globs or `-`. One failing file does not stop the rest (unless `--fail-fast`); the exit status is `1` if anything failed. Without `-o`, several inputs go to stdout (`--json` emits JSON Lines). Formats: `txt`, `json` (add `--words` for word boxes), `md`.
+
+### API
+
+```python
+from czytajpdf import extract, extract_iter, make_searchable, download_models
+
+doc = extract("file.pdf", ocr=True, correct="suggest", lang="auto", pages="1-20,25-",
+              workers=4, preprocess=True, cache=True, password=None, backend="pdfium")
+page = doc.pages[0]
+page.confidence, page.lang, page.width, page.height   # mean OCR confidence (0-100), language, size in points
+page.words        # Word(text, bbox=(x0, y0, x1, y1) in points from the top-left, confidence)
+page.corrections  # Correction(raw, fixed, offset); with correct="suggest" `text` stays raw
+doc.low_confidence_pages(70)
+
+for page in extract_iter("500-pages.pdf", ocr=True):  # stream pages without holding the whole result
+    ...
+
+make_searchable("scan.pdf", "scan-ocr.pdf", lang="en")   # invisible text layer over the original pages
+download_models(["pl", "en"], "./tessdata", include_osd=True)
+
+chunks = doc.chunks(max_chars=1200, overlap=150)         # metadata: page, source, confidence, lang, corrected
+docs = doc.to_langchain(max_chars=1200)                  # pip install 'czytajpdf[langchain]'
+docs = doc.to_llamaindex()                               # pip install 'czytajpdf[llamaindex]'
+```
+
+- **Languages:** `lang="pl"`, `"en"`, `"pl+en"`, `"auto"` (Polish+English, detected per page) or any Tesseract language (`"de"`, `"fra"`, `"uk"`, …; pinned checksums for de, fr, es, it, cs, uk, ru, pt, nl, sk, la). Spelling repair covers `pl` and `en`; in mixed text, words valid in the other language are protected.
+- **Pre-processing:** `preprocess=True` fixes 90/180/270° rotation (Tesseract OSD) and skew; or pass `"rotate,deskew,denoise,binarize"`. `words` coordinates refer to the processed image.
+- **Performance:** `workers=N` runs N OCR processes (scripts need an `if __name__ == "__main__":` guard). `cache=True` (or a directory) skips re-OCR of unchanged pages (key: PDF content, page, options).
+- **Offline:** `czytajpdf download-models` fetches and verifies models; then use `tessdata_dir=` / `CZYTAJPDF_TESSDATA` (a folder of `*.traineddata`, never downloads) or `offline=True` / `CZYTAJPDF_OFFLINE=1`.
+- **Text backend:** `backend="pdfium"` (pypdfium2, Apache/BSD) is often faster than `pypdf` and orders text better. PyMuPDF is deliberately not used because of its AGPL licence.
+- **Errors:** `CzytajPDFError` and subclasses (`InvalidPDFError`, `PasswordRequiredError`, `MissingDependencyError`, `ModelNotFoundError`) also inherit `ValueError`/`ImportError`/`OSError`. Logs go to `logging.getLogger("czytajpdf")` (`-v` in the CLI). AES-encrypted PDFs need `czytajpdf[crypto]`.
+
+### Stress benchmark (synthetic full pages)
+
+CER of Tesseract OCR on rendered pages with common defects. [Script](benchmarks/stress.py) · [results](benchmarks/stress_results.json). Real scans can be harder: this is a regression test and a demonstration of pre-processing, not a quality guarantee.
+
+| Case | Lang | No pre-processing | `preprocess=True` | `rotate,deskew,denoise` |
+| --- | --- | ---: | ---: | ---: |
+| clean | `pl` | 0.36% | 0.36% | 0.36% |
+| skew 2° | `pl` | 0.36% | 0.36% | 0.36% |
+| skew 4° + blur | `pl` | 27.74% | 0.36% | 0.36% |
+| rotated 90° | `pl` | 89.42% | 0.36% | 0.36% |
+| upside down | `pl` | 89.78% | 0.36% | 0.36% |
+| speckle noise | `pl` | 14.60% | 14.60% | 0.73% |
+| low contrast | `pl` | 0.36% | 0.36% | 0.36% |
+| clean | `en` | 0.00% | 0.00% | 0.00% |
+| skew 3° + noise | `en` | 33.19% | 12.50% | 0.00% |
+
 ## How extraction works
 
 - By default, `pypdf` extracts embedded text. With `ocr=True`, pages with fewer than 40 non-whitespace characters or a garbled text layer (e.g. `(cid:...)` markers, replacement/control/PUA characters, low alphanumeric share, vowel-less gibberish, or low known-word share when a language lexicon is installed) are routed to Tesseract for the chosen language (`lang="pl"` or `lang="en"`; `engine="rapidocr"` selects RapidOCR; `min_chars` changes the length threshold).

@@ -1,22 +1,37 @@
 """Page-wise English PDF text extraction powered by CzytajPDF."""
 
 from pathlib import Path
-from typing import BinaryIO, Literal
+from typing import BinaryIO, Iterator
 
-from czytajpdf import Document, Page
+from czytajpdf import (
+    Chunk,
+    Correction,
+    CzytajPDFError,
+    Document,
+    InvalidPDFError,
+    MissingDependencyError,
+    ModelNotFoundError,
+    Page,
+    PasswordRequiredError,
+    Word,
+    download_models,
+    make_searchable,
+)
 from czytajpdf import extract as _extract
+from czytajpdf import extract_iter as _extract_iter
 
-__all__ = ["Document", "Page", "extract"]
+__all__ = [
+    "Chunk", "Correction", "CzytajPDFError", "Document", "InvalidPDFError", "MissingDependencyError",
+    "ModelNotFoundError", "Page", "PasswordRequiredError", "Word", "download_models", "extract",
+    "extract_iter", "make_searchable",
+]
 
 
-def extract(
-    path: str | Path | bytes | BinaryIO,
-    *,
-    ocr: bool = False,
-    correct: bool = False,
-    min_chars: int = 40,
-    engine: Literal["tesseract", "rapidocr"] = "tesseract",
-    lang: Literal["pl", "en"] = "en",
-) -> Document:
-    """Read all pages of a PDF, falling back to English OCR below min_chars or on garbled layers."""
-    return _extract(path, ocr=ocr, correct=correct, min_chars=min_chars, engine=engine, lang=lang)
+def extract(path: str | Path | bytes | BinaryIO, *, lang: str = "en", **kwargs) -> Document:
+    """Read all pages of a PDF; OCR falls back to English by default. See ``czytajpdf.extract``."""
+    return _extract(path, lang=lang, **kwargs)
+
+
+def extract_iter(path: str | Path | bytes | BinaryIO, *, lang: str = "en", **kwargs) -> Iterator[Page]:
+    """Yield pages one by one. See ``czytajpdf.extract_iter``."""
+    return _extract_iter(path, lang=lang, **kwargs)

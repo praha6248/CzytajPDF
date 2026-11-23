@@ -72,7 +72,7 @@ def is_garbled(text: str, lang: str = "pl") -> bool:
         if vowel_share < 0.40:
             return True
 
-    if len(words) >= 8:
+    if len(words) >= 8 and lang in ("pl", "en"):
         quality = _lexicon_quality(words, lang)
         if quality is not None and quality < 0.35:
             return True
