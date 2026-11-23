@@ -48,8 +48,10 @@ jobs:
       - name: Install all packages, extras, and build tools
         run: |
           python -m pip install --upgrade pip
-          python -m pip install ".[ocr,polish,english]" ./packages/readpdf-pl ./packages/readpdf-en build twine
-      - name: Run full unit test suite
+          python -m pip install ".[ocr,polish,english,crypto]" ./packages/readpdf-pl ./packages/readpdf-en build twine
+      - name: Run full unit test suite (including real Tesseract runs)
+        env:
+          CZYTAJPDF_INTEGRATION: "1"
         run: python -m unittest discover -s tests -v
       - name: Build and verify all distributions
         run: |

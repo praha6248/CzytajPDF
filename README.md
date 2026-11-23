@@ -116,6 +116,66 @@ Pomiar obejmuje 9 archiwalnych skanów *United States Reports* z Library of Cong
 
 [Pomiar angielski](benchmarks/english_results.json) · [Walidacja angielska](benchmarks/english_validation.json)
 
+## Nowości w 0.5
+
+### CLI wsadowe
+
+```sh
+czytajpdf akta/ --ocr --correct --workers 4 --preprocess -o wyniki/ --format md --progress
+czytajpdf 'skany/**/*.pdf' --ocr --pages 1-5 --min-confidence 70 --skip-existing -o wyniki/
+czytajpdf skan.pdf --ocr --searchable -o wyniki/      # wyniki/skan.searchable.pdf z warstwą tekstową
+czytajpdf download-models --lang pl en --osd --dir ./tessdata
+```
+
+Argumentem może być plik, katalog (rekurencyjnie), wzorzec glob lub `-`. Błąd jednego pliku nie przerywa reszty (chyba że `--fail-fast`); kod wyjścia to `1`, gdy cokolwiek się nie udało. Bez `-o` kilka wejść trafia na stdout (`--json` daje JSON Lines). Formaty: `txt`, `json` (z `--words` także ramki słów), `md`.
+
+### API
+
+```python
+from czytajpdf import extract, extract_iter, make_searchable, download_models
+
+doc = extract("akta.pdf", ocr=True, correct="suggest", lang="auto", pages="1-20,25-",
+              workers=4, preprocess=True, cache=True, password=None, backend="pdfium")
+page = doc.pages[0]
+page.confidence, page.lang, page.width, page.height      # średnia pewność OCR (0-100), język, rozmiar w pkt
+page.words      # Word(text, bbox=(x0, y0, x1, y1) w pkt od lewego górnego rogu, confidence)
+page.corrections  # Correction(raw, fixed, offset) - przy correct="suggest" text zostaje surowy
+doc.low_confidence_pages(70)
+
+for page in extract_iter("500-stron.pdf", ocr=True):      # strony na bieżąco, bez trzymania całości w pamięci
+    ...
+
+make_searchable("skan.pdf", "skan-ocr.pdf", lang="pl")    # niewidoczna warstwa tekstu na oryginalnych stronach
+download_models(["pl", "en"], "./tessdata", include_osd=True)
+
+chunks = doc.chunks(max_chars=1200, overlap=150)          # metadane: page, source, confidence, lang, corrected
+docs = doc.to_langchain(max_chars=1200)                   # pip install 'czytajpdf[langchain]'
+docs = doc.to_llamaindex()                                # pip install 'czytajpdf[llamaindex]'
+```
+
+- **Języki:** `lang="pl"`, `"en"`, `"pl+en"`, `"auto"` (polski+angielski, język wykrywany dla każdej strony) lub dowolny język Tesseract (`"de"`, `"fra"`, `"uk"`…; wbudowane sumy kontrolne: de, fr, es, it, cs, uk, ru, pt, nl, sk, la). Korekta pisowni działa dla `pl` i `en`; w tekstach mieszanych słowa poprawne w drugim języku są chronione.
+- **Preprocessing:** `preprocess=True` prostuje obrót o 90/180/270° (OSD Tesseracta) i pochylenie skanu; można też wskazać `"rotate,deskew,denoise,binarize"`. Współrzędne `words` odnoszą się do obrazu po obróbce.
+- **Wydajność:** `workers=N` uruchamia N procesów OCR (w skryptach wymagane `if __name__ == "__main__":`). `cache=True` (lub katalog) pomija ponowne OCR niezmienionych stron (klucz: zawartość PDF, strona i opcje).
+- **Offline:** `czytajpdf download-models` pobiera i weryfikuje modele; potem `tessdata_dir=` / `CZYTAJPDF_TESSDATA` (katalog z `*.traineddata`, nigdy nie pobiera) albo `offline=True` / `CZYTAJPDF_OFFLINE=1`.
+- **Backend tekstu:** `backend="pdfium"` (pypdfium2, Apache/BSD) bywa szybszy od `pypdf` i lepiej układa kolejność czytania. PyMuPDF celowo pominięto ze względu na licencję AGPL.
+- **Błędy:** `CzytajPDFError` i podklasy (`InvalidPDFError`, `PasswordRequiredError`, `MissingDependencyError`, `ModelNotFoundError`) dziedziczą też po `ValueError`/`ImportError`/`OSError`. Szczegóły działania w logach (`logging.getLogger("czytajpdf")`, w CLI `-v`). PDF-y szyfrowane AES wymagają `czytajpdf[crypto]`.
+
+### Test wytrzymałościowy (syntetyczne pełne strony)
+
+CER po OCR Tesseract na wyrenderowanych stronach z typowymi wadami. [Skrypt](benchmarks/stress.py) · [wyniki](benchmarks/stress_results.json). Prawdziwe skany bywają trudniejsze: to test regresji i dowód działania preprocessingu, nie obietnica jakości.
+
+| Przypadek | Język | Bez obróbki | `preprocess=True` | `rotate,deskew,denoise` |
+| --- | --- | ---: | ---: | ---: |
+| clean | `pl` | 0.36% | 0.36% | 0.36% |
+| skew 2° | `pl` | 0.36% | 0.36% | 0.36% |
+| skew 4° + blur | `pl` | 27.74% | 0.36% | 0.36% |
+| rotated 90° | `pl` | 89.42% | 0.36% | 0.36% |
+| upside down | `pl` | 89.78% | 0.36% | 0.36% |
+| speckle noise | `pl` | 14.60% | 14.60% | 0.73% |
+| low contrast | `pl` | 0.36% | 0.36% | 0.36% |
+| clean | `en` | 0.00% | 0.00% | 0.00% |
+| skew 3° + noise | `en` | 33.19% | 12.50% | 0.00% |
+
 ## Jak wybierany jest sposób odczytu
 
 - Domyślnie działa pypdf. Przy `ocr=True` strony z mniej niż 40 znakami po pominięciu białych znaków albo z uszkodzoną warstwą tekstową („krzakami”, np. znacznikami `(cid:...)`, znakami zastępczymi/PUA, niskim udziałem liter i cyfr, brakiem samogłosek lub niskim udziałem rozpoznawalnych słów przy dostępnym słowniku) trafiają do modelu Tesseract dla wybranego języka (`lang="pl"` albo `lang="en"`). Aby wybrać RapidOCR, przekaż `engine="rapidocr"`. Próg znaków zmienisz przez `min_chars`.
